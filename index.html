@@ -1,0 +1,1072 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>llama.cpp server.cpp 主流程层级图</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f7f6;
+      --paper: #ffffff;
+      --ink: #1d2426;
+      --muted: #657174;
+      --line: #d8e3df;
+      --line-strong: #b8c8c2;
+      --teal: #0f766e;
+      --teal-soft: #e2f3ef;
+      --blue: #2e6f9e;
+      --blue-soft: #e7f0f8;
+      --gold: #846708;
+      --gold-soft: #f8efd1;
+      --red: #b4543a;
+      --red-soft: #fde8df;
+      --violet: #6757a6;
+      --violet-soft: #eeebfb;
+      --green: #3f7f4f;
+      --green-soft: #e8f3e8;
+      --code: #101719;
+      --shadow: 0 12px 28px rgba(29, 36, 38, 0.08);
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--sans); line-height: 1.55; }
+    button, input, select { font: inherit; }
+    button { color: inherit; }
+    code, pre { font-family: var(--mono); }
+    .app { display: grid; grid-template-columns: 300px minmax(0, 1fr) 370px; gap: 18px; padding: 18px; min-height: 100vh; }
+    .left-nav, .glossary-side, header, section { background: var(--paper); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); }
+    .left-nav, .glossary-side { position: sticky; top: 18px; height: calc(100vh - 36px); overflow: auto; padding: 14px; }
+    header { padding: 24px; margin-bottom: 18px; }
+    section { padding: 18px; margin-bottom: 18px; }
+    h1, h2, h3 { line-height: 1.18; letter-spacing: 0; }
+    h1 { margin: 0 0 10px; font-size: 34px; }
+    h2 { margin: 0 0 12px; font-size: 23px; }
+    h3 { margin: 0 0 8px; font-size: 17px; }
+    p { margin: 0 0 10px; color: var(--muted); }
+    .eyebrow { margin: 0 0 8px; color: var(--teal); font-size: 13px; font-weight: 700; text-transform: uppercase; }
+    .top-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-top: 16px; }
+    .metric { min-height: 82px; border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: #fbfcfb; }
+    .metric span { display: block; color: var(--muted); font-size: 12px; }
+    .metric b { display: block; margin-top: 6px; font-size: 17px; line-height: 1.25; word-break: break-word; }
+    .mode-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+    .mode-btn, .small-btn { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; background: #fff; cursor: pointer; }
+    .mode-btn.active, .small-btn:hover { border-color: var(--teal); background: var(--teal-soft); }
+    .mode-row .deep-only { display: inline-flex; }
+    .nav-list, .event-list { display: grid; gap: 8px; }
+    .nav-btn, .event-btn { width: 100%; border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 9px 10px; text-align: left; cursor: pointer; }
+    .nav-btn:hover, .nav-btn.active, .event-btn:hover, .event-btn.active { border-color: var(--blue); background: var(--blue-soft); }
+    .nav-btn strong, .event-btn strong { display: block; font-size: 13px; }
+    .nav-btn small, .event-btn small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+    .toolbar { display: grid; gap: 8px; margin: 14px 0 10px; }
+    input, select { width: 100%; min-height: 38px; border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; background: #fff; color: var(--ink); }
+    .callout { padding: 13px; border-left: 4px solid var(--red); border-radius: 8px; background: var(--red-soft); color: #513022; }
+    .talk-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+    .talk-card { border: 1px solid var(--line); border-radius: 8px; background: #fbfcfb; padding: 12px; }
+    .talk-card .time { display: inline-flex; border-radius: 999px; background: var(--gold-soft); color: #4e3e06; padding: 2px 8px; font-size: 12px; margin-bottom: 8px; }
+    .layout { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(360px, 0.75fr); gap: 12px; align-items: start; }
+    .diagram { display: grid; gap: 12px; }
+    .lane { border: 1px solid var(--line); border-radius: 8px; background: #fbfcfb; padding: 12px; }
+    .lane-header { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; margin-bottom: 10px; }
+    .lane-header h3 { margin: 0; }
+    .lane-header small { color: var(--muted); }
+    .node-stack { display: grid; gap: 8px; }
+    .node { width: 100%; border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 10px; text-align: left; cursor: pointer; position: relative; }
+    .node:hover, .node.active { border-color: var(--teal); background: var(--teal-soft); }
+    .node.critical { border-left: 5px solid var(--teal); }
+    .node.helper { margin-left: 22px; width: calc(100% - 22px); border-left: 5px solid var(--line-strong); }
+    .node .title-line { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+    .node strong { font-size: 15px; }
+    .tag { display: inline-flex; border-radius: 999px; padding: 2px 8px; font-size: 12px; background: var(--blue-soft); color: var(--blue); white-space: nowrap; }
+    .tag.critical { background: var(--teal-soft); color: var(--teal); }
+    .tag.helper { background: #eef3f1; color: var(--muted); }
+    .node p { margin: 5px 0 0; font-size: 13px; }
+    .children { display: grid; gap: 6px; margin-top: 8px; }
+    .child-chip { border: 1px dashed var(--line-strong); border-radius: 8px; background: #fff; padding: 7px 9px; text-align: left; cursor: pointer; }
+    .child-chip:hover, .child-chip.active { border-color: var(--violet); background: var(--violet-soft); }
+    .edge-list { display: grid; gap: 0; }
+    .flow-step { display: grid; gap: 0; }
+    .flow-node { width: 100%; display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 12px; align-items: center; border: 1px solid var(--line); border-left: 5px solid var(--teal); border-radius: 8px; background: #fff; padding: 12px; text-align: left; cursor: pointer; }
+    .flow-node:hover, .flow-node.active { border-color: var(--teal); background: var(--teal-soft); }
+    .flow-index { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 999px; background: var(--teal-soft); color: var(--teal); font-family: var(--mono); font-weight: 700; font-size: 13px; }
+    .flow-node strong { display: block; font-size: 16px; }
+    .flow-node small { display: block; color: var(--muted); margin-top: 3px; }
+    .flow-kind { border-radius: 999px; background: var(--blue-soft); color: var(--blue); padding: 3px 8px; font-size: 12px; white-space: nowrap; }
+    .flow-arrow { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 12px; align-items: center; min-height: 48px; }
+    .flow-arrow-icon { justify-self: center; color: var(--teal); font-size: 24px; line-height: 1; }
+    .flow-arrow-text { border: 1px dashed var(--line-strong); border-radius: 999px; background: #fbfcfb; color: var(--muted); padding: 6px 10px; font-size: 13px; }
+    .presentation-stage { display: block; }
+    .presentation-only { display: none; }
+    .focus-panel { position: sticky; top: 18px; border: 1px solid var(--line); border-radius: 8px; background: #fbfcfb; padding: 16px; }
+    .focus-eyebrow { display: inline-flex; margin-bottom: 8px; border-radius: 999px; background: var(--gold-soft); color: #4e3e06; padding: 3px 9px; font-size: 12px; font-weight: 700; }
+    .focus-panel h3 { margin-bottom: 4px; font-size: 24px; }
+    .focus-sub { color: var(--muted); margin-bottom: 10px; }
+    .focus-copy { color: var(--ink); font-size: 16px; margin-bottom: 12px; }
+    .focus-grid { display: grid; gap: 8px; }
+    .focus-box { border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 10px; }
+    .focus-box b { display: block; margin-bottom: 5px; }
+    .focus-box ul { margin: 0; padding-left: 18px; }
+    .focus-evidence { margin-top: 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 10px; color: var(--muted); font-size: 13px; line-height: 1.6; word-break: break-word; }
+    .focus-evidence b { display: block; color: var(--ink); margin-bottom: 4px; }
+    .deck-shell { min-height: calc(100vh - 36px); padding: 22px; display: grid; grid-template-rows: auto auto 1fr auto; gap: 16px; }
+    .deck-toolbar, .deck-status, .deck-controls { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+    .deck-toolbar h1 { margin: 0; font-size: 30px; }
+    .deck-toolbar p { margin-bottom: 4px; }
+    .deck-status { color: var(--muted); font-size: 13px; }
+    .deck-counter { min-width: 64px; color: var(--teal); font-family: var(--mono); font-weight: 700; }
+    .deck-progress { flex: 1; height: 8px; border-radius: 999px; background: #eaf1ee; overflow: hidden; }
+    .deck-progress span { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--teal), var(--blue)); transition: width 180ms ease; }
+    .deck-stage { position: relative; min-height: 640px; }
+    .deck-slide { display: none; height: 100%; min-height: 640px; border: 1px solid var(--line); border-radius: 8px; background: #fbfcfb; padding: 24px; }
+    .deck-slide.active { display: grid; grid-template-rows: auto 1fr auto; gap: 18px; }
+    .slide-top { display: flex; justify-content: space-between; gap: 18px; align-items: start; }
+    .slide-kicker { display: inline-flex; border-radius: 999px; background: var(--gold-soft); color: #4e3e06; padding: 3px 10px; font-size: 12px; font-weight: 700; margin-bottom: 10px; }
+    .slide-title { margin: 0 0 10px; font-size: 34px; max-width: 920px; }
+    .slide-lead { max-width: 900px; color: var(--ink); font-size: 18px; }
+    .slide-takeaway { min-width: 280px; max-width: 360px; border-left: 4px solid var(--teal); border-radius: 8px; background: var(--teal-soft); padding: 12px 14px; color: #194b47; font-weight: 700; }
+    .slide-visual { min-height: 390px; display: flex; align-items: stretch; }
+    .slide-terms { display: flex; flex-wrap: wrap; gap: 8px; }
+    .slide-term { border: 1px solid var(--line); border-radius: 999px; background: #fff; padding: 5px 10px; cursor: pointer; color: var(--teal); }
+    .slide-term:hover { border-color: var(--teal); background: var(--teal-soft); }
+    .hero-chain, .recap-chain { width: 100%; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; align-items: stretch; }
+    .chain-card, .recap-card, .lane-card, .task-card, .pipeline-card, .result-card, .token-step, .mini-code { border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+    .chain-card, .recap-card { min-height: 190px; padding: 16px 12px; display: grid; align-content: center; gap: 8px; text-align: center; position: relative; }
+    .chain-card strong, .recap-card strong { font-size: 17px; }
+    .chain-card small, .recap-card small { color: var(--muted); }
+    .chain-card:not(:last-child)::after, .recap-card:not(:last-child)::after { content: '→'; position: absolute; right: -10px; top: 50%; transform: translateY(-50%); width: 20px; color: var(--teal); font-size: 22px; font-weight: 700; z-index: 1; }
+    .deck-metrics { width: 100%; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-content: center; }
+    .deck-metric { border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 16px; }
+    .deck-metric span { display: block; color: var(--muted); font-size: 13px; }
+    .deck-metric b { display: block; margin-top: 8px; font-size: 22px; }
+    .dual-lanes { width: 100%; display: grid; gap: 14px; align-content: center; }
+    .lane-band { border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 16px; }
+    .lane-band strong { display: block; margin-bottom: 12px; font-size: 18px; }
+    .lane-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+    .lane-card { min-height: 112px; padding: 14px; display: grid; align-content: center; text-align: center; gap: 6px; }
+    .lane-card.primary { background: var(--blue-soft); border-color: #cbddec; }
+    .transform-grid, .schedule-grid, .result-grid { width: 100%; display: grid; gap: 14px; align-items: stretch; }
+    .transform-grid { grid-template-columns: minmax(0, 1fr) 110px minmax(0, 1fr); }
+    .transform-arrow, .result-arrow { display: grid; place-items: center; color: var(--teal); font-size: 34px; font-weight: 700; }
+    .mini-code { padding: 16px; background: #101719; color: #e7f0ed; overflow: hidden; }
+    .mini-code b { display: block; color: #ffffff; margin-bottom: 10px; font-size: 15px; }
+    .mini-code pre { margin: 0; padding: 0; background: transparent; max-height: none; font-size: 15px; }
+    .task-formation { width: 100%; display: grid; grid-template-columns: minmax(0, 0.9fr) 120px minmax(0, 1.1fr); gap: 14px; align-items: center; }
+    .task-card { padding: 18px; }
+    .task-card h3 { margin-bottom: 10px; font-size: 20px; }
+    .token-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 90px; min-height: 90px; border-radius: 999px; background: var(--gold-soft); color: #4e3e06; font-family: var(--mono); font-size: 28px; font-weight: 700; }
+    .token-cloud { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .token-chip { border-radius: 999px; background: #eef4f1; color: var(--muted); padding: 5px 10px; font-family: var(--mono); font-size: 13px; }
+    .schedule-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); align-content: center; }
+    .schedule-step { border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 18px; min-height: 220px; display: grid; align-content: center; gap: 10px; text-align: center; position: relative; }
+    .schedule-step:not(:last-child)::after { content: '→'; position: absolute; right: -11px; top: 50%; transform: translateY(-50%); color: var(--teal); font-size: 24px; font-weight: 700; }
+    .schedule-step b { font-size: 18px; }
+    .schedule-step em { color: var(--muted); font-style: normal; }
+    .pipeline-grid { width: 100%; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; align-content: center; }
+    .pipeline-card { min-height: 180px; padding: 16px; display: grid; gap: 8px; align-content: center; text-align: center; position: relative; }
+    .pipeline-card:not(:last-child)::after { content: '→'; position: absolute; right: -10px; top: 50%; transform: translateY(-50%); color: var(--teal); font-size: 22px; font-weight: 700; }
+    .batch-strip { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
+    .batch-pill { border: 1px solid var(--line); border-radius: 999px; background: #fff; padding: 8px 10px; text-align: center; font-family: var(--mono); }
+    .batch-pill:first-child { background: var(--gold-soft); color: #4e3e06; font-weight: 700; }
+    .round-grid { width: 100%; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-content: center; }
+    .round-card { border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 14px; display: grid; gap: 8px; min-height: 170px; }
+    .round-card:first-child { background: var(--gold-soft); border-color: #ead9a1; }
+    .round-card.final { background: var(--green-soft); border-color: #c6dbcf; }
+    .round-card span { color: var(--muted); font-size: 13px; }
+    .round-card strong { font-size: 20px; }
+    .round-card code { width: fit-content; background: #f5f8f7; border-radius: 6px; padding: 4px 7px; }
+    .token-growth { width: 100%; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-content: center; }
+    .token-step { min-height: 150px; padding: 14px; display: grid; gap: 8px; align-content: space-between; }
+    .token-step.final { border-color: #c6dbcf; background: var(--green-soft); }
+    .token-step code { font-size: 18px; color: var(--ink); background: #f5f8f7; padding: 5px 8px; border-radius: 6px; width: fit-content; }
+    .token-step strong { font-size: 22px; word-break: break-word; }
+    .result-grid { grid-template-columns: minmax(0, 1fr) 96px minmax(0, 1fr); }
+    .result-card { padding: 18px; display: grid; align-content: center; gap: 10px; }
+    .result-card h3 { font-size: 20px; }
+    .result-card ul { margin: 0; padding-left: 18px; }
+    .recap-card { min-height: 170px; }
+    .update-overview { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+    .update-step { border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 12px; min-height: 116px; display: grid; align-content: center; gap: 6px; text-align: center; position: relative; }
+    .update-step:not(:last-child)::after { content: '→'; position: absolute; right: -10px; top: 50%; transform: translateY(-50%); color: var(--teal); font-size: 22px; font-weight: 700; }
+    .update-round-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(360px, 0.8fr); gap: 12px; align-items: start; }
+    .update-round-list { display: grid; gap: 10px; }
+    .update-round-btn { width: 100%; border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 12px; text-align: left; cursor: pointer; display: grid; gap: 6px; }
+    .update-round-btn.active, .update-round-btn:hover { border-color: var(--teal); background: var(--teal-soft); }
+    .update-round-btn strong { display: flex; justify-content: space-between; gap: 10px; }
+    .update-detail { border: 1px solid var(--line); border-radius: 8px; background: #fbfcfb; padding: 14px; }
+    .update-detail h3 { font-size: 20px; }
+    .update-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+    .update-detail-box { border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 10px; }
+    .update-event-list { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+    .deck-controls { border-top: 1px solid var(--line); padding-top: 14px; }
+    .deck-nav-btn { border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 8px 12px; cursor: pointer; }
+    .deck-nav-btn:hover, .deck-nav-btn:focus-visible { border-color: var(--teal); background: var(--teal-soft); }
+    .deck-dots { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; flex: 1; }
+    .deck-dot { width: 12px; height: 12px; border-radius: 999px; border: 1px solid var(--line-strong); background: #fff; cursor: pointer; }
+    .deck-dot.active { border-color: var(--teal); background: var(--teal); }
+    .panel { position: sticky; top: 18px; border: 1px solid var(--line); border-radius: 8px; background: #fbfcfb; padding: 14px; }
+    .panel h3 { margin-bottom: 4px; }
+    .panel-sub { color: var(--muted); margin-bottom: 10px; }
+    .io-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0; }
+    .io-box { border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 10px; }
+    .io-box b { display: block; margin-bottom: 5px; }
+    ul { margin: 0; padding-left: 18px; }
+    li { margin: 3px 0; }
+    .source { color: var(--muted); font-size: 12px; margin: 8px 0; }
+    .pill-row { display: flex; flex-wrap: wrap; gap: 7px; margin: 8px 0; }
+    .pill, .event-link { border: 1px solid var(--line); border-radius: 999px; background: #fff; padding: 4px 8px; font-size: 12px; }
+    .event-link { cursor: pointer; }
+    .event-link:hover { border-color: var(--teal); background: var(--teal-soft); }
+    pre { margin: 0; max-height: 520px; overflow: auto; background: var(--code); color: #e7f0ed; border-radius: 8px; padding: 13px; font-size: 13px; line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
+    .table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border-bottom: 1px solid var(--line); padding: 8px 9px; text-align: left; vertical-align: top; font-size: 13px; }
+    th { background: #eef4f1; }
+    .phase { color: var(--teal); font-family: var(--mono); }
+    .term { border: 0; border-bottom: 1px dotted var(--teal); background: transparent; color: var(--teal); padding: 0 1px; cursor: help; }
+    .glossary-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+    .term-chip { border: 1px solid var(--line); border-radius: 999px; background: #fff; padding: 5px 9px; cursor: pointer; }
+    .term-chip:hover, .term-chip.active, .term:hover { border-color: var(--teal); background: var(--teal-soft); }
+    .glossary-side h2 { margin-bottom: 18px; }
+    .glossary-title { font-size: 30px; margin-bottom: 14px; word-break: break-word; }
+    .glossary-label { display: block; color: var(--teal); font-weight: 700; font-size: 13px; margin: 16px 0 5px; }
+    .glossary-text { color: var(--ink); font-size: 16px; line-height: 1.65; }
+    .glossary-source { color: var(--muted); font-family: var(--mono); font-size: 13px; margin-top: 14px; }
+    .glossary-related { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 8px; }
+    .related-chip { border: 1px solid var(--line); border-radius: 999px; background: #fff; padding: 4px 8px; font-size: 12px; cursor: pointer; }
+    .related-chip:hover { border-color: var(--violet); background: var(--violet-soft); }
+    .glossary-list-title { margin-top: 20px; }
+    .glossary-search { margin: 0 0 8px; }
+    .glossary-count { color: var(--muted); font-size: 12px; margin: 0 0 10px; }
+    .glossary-empty { width: 100%; border: 1px dashed var(--line-strong); border-radius: 8px; padding: 10px; color: var(--muted); background: #fbfcfb; }
+    .deep-only { display: block; }
+    body.presentation .deep-only { display: none; }
+    body.presentation .presentation-only { display: block; }
+    body.presentation .deck-shell { display: grid; }
+    body.presentation .deep-header { display: none; }
+    body.presentation .layout { grid-template-columns: 1fr; }
+    body.presentation .panel { position: static; }
+    body.presentation .left-nav { display: none; }
+    body.presentation .app { grid-template-columns: minmax(0, 1fr) 370px; max-width: 1480px; margin: 0 auto; }
+    body.presentation .presentation-stage { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 14px; align-items: start; }
+    body.presentation .flow-node { grid-template-columns: 44px minmax(0, 1fr); min-height: 72px; }
+    body.presentation .flow-node small,
+    body.presentation .flow-kind { display: none; }
+    body.presentation .flow-arrow-text { color: #425153; background: #fff; font-weight: 600; }
+    body.presentation .flow-arrow { min-height: 42px; }
+    @media (max-width: 1280px) { .app { grid-template-columns: 280px minmax(0, 1fr) 330px; } }
+    @media (max-width: 1120px) { .app { display: block; } .left-nav, .glossary-side { position: static; height: auto; margin-bottom: 18px; } .top-grid, .talk-grid, .layout, .io-grid, body.presentation .presentation-stage, .transform-grid, .task-formation, .schedule-grid, .result-grid, .pipeline-grid, .hero-chain, .recap-chain, .deck-metrics, .lane-row, .token-growth, .round-grid, .update-overview, .update-round-layout, .update-detail-grid { grid-template-columns: 1fr; } .panel, .focus-panel { position: static; } h1 { font-size: 28px; } .flow-node { grid-template-columns: 38px minmax(0, 1fr); } .flow-kind { display: none; } .deck-shell { min-height: auto; } .deck-stage, .deck-slide { min-height: auto; } .slide-top, .deck-toolbar, .deck-status, .deck-controls { display: grid; justify-content: stretch; } .slide-takeaway { max-width: none; } .chain-card:not(:last-child)::after, .recap-card:not(:last-child)::after, .schedule-step:not(:last-child)::after, .pipeline-card:not(:last-child)::after, .update-step:not(:last-child)::after { display: none; } .batch-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="left-nav">
+      <h2>函数导航</h2>
+      <p>先从关键函数看，再展开 helper。左侧事件是 trace 证据，不是主阅读入口。</p>
+      <div id="nodeNav" class="nav-list"></div>
+      <div class="toolbar deep-only">
+        <input id="search" placeholder="搜索 trace phase / JSON 内容">
+        <select id="phaseFilter"><option value="">全部 trace 事件</option></select>
+      </div>
+      <div id="eventList" class="event-list deep-only"></div>
+    </aside>
+    <main>
+      <header class="deep-header">
+        <p class="eyebrow">技术 walkthrough / commit 1f5accb / 真实 trace 驱动</p>
+        <h1>server.cpp 主流程：从 main() 到 /v1/chat/completions 返回</h1>
+        <p>把一条真实 chat 请求，从 HTTP 入口一路跟到最终 JSON 返回。演示模式只保留主链路，深挖模式再展开函数和 trace。</p>
+        <div class="top-grid">
+          <div class="metric"><span>请求入口</span><b>/v1/chat/completions</b></div>
+          <div class="metric"><span>task</span><b>id=0, COMPLETION</b></div>
+          <div class="metric"><span>slot</span><b>slot 3</b></div>
+          <div class="metric"><span>decode</span><b>57 + 7x1 batch</b></div>
+          <div class="metric"><span>最终输出</span><b>"Here!" A</b></div>
+        </div>
+        <div class="mode-row">
+          <button id="presentationBtn" class="mode-btn active">演示模式</button>
+          <button id="deepBtn" class="mode-btn">深挖模式</button>
+          <button id="expandBtn" class="small-btn deep-only">展开所有关键节点</button>
+        </div>
+      </header>
+
+      <section id="presentationDeck" class="deck-shell presentation-only" aria-label="server.cpp 演示 deck">
+        <div class="deck-toolbar">
+          <div>
+            <p class="eyebrow">技术演示 deck / commit 1f5accb / 真实 trace</p>
+            <h1>server.cpp 主流程演示</h1>
+          </div>
+          <div class="mode-row" style="margin-top:0">
+            <button id="deckDeepBtn" class="mode-btn">深挖模式</button>
+          </div>
+        </div>
+        <div class="deck-status">
+          <span id="deckCounter" class="deck-counter">01 / 10</span>
+          <div class="deck-progress"><span id="deckProgress"></span></div>
+        </div>
+        <div id="deckStage" class="deck-stage"></div>
+        <div class="deck-controls">
+          <button id="prevSlideBtn" class="deck-nav-btn">上一页</button>
+          <div id="deckDots" class="deck-dots" aria-label="页面进度"></div>
+          <button id="nextSlideBtn" class="deck-nav-btn">下一页</button>
+        </div>
+      </section>
+
+      <section class="deep-only">
+        <h2>一句话主线</h2>
+        <div class="callout"><button class="term" data-term="main()">main()</button> 把 server 跑起来并注册路由；<button class="term" data-term="HTTP handler">HTTP handler</button> 把请求整理成 <button class="term" data-term="server_task">server_task</button>；后台 <button class="term" data-term="queue_tasks">queue_tasks</button> 和 <button class="term" data-term="slot">slot</button> 调度它；<button class="term" data-term="update_slots()">update_slots()</button> 调 <button class="term" data-term="llama_decode()">llama_decode()</button> 并采样；最终通过 <button class="term" data-term="queue_results">queue_results</button> 回到 HTTP JSON。</div>
+      </section>
+
+      <section class="deep-only">
+        <h2>15 分钟讲解节奏</h2>
+        <div id="talkTrack" class="talk-grid"></div>
+      </section>
+
+      <section class="deep-only">
+        <h2>层级流程图</h2>
+        <p>点击任意节点，右侧会显示这个函数的输入、输出、真实 trace 证据和源码位置。粗左边框是必须讲清楚的关键函数，缩进虚线框是辅助函数。</p>
+        <div class="layout">
+          <div>
+            <div id="diagram" class="diagram"></div>
+          </div>
+          <aside class="panel" aria-live="polite">
+            <h3 id="nodeTitle">选择一个节点</h3>
+            <p id="nodeSub" class="panel-sub"></p>
+            <p id="nodeSolves"></p>
+            <div class="io-grid">
+              <div class="io-box"><b>输入</b><ul id="nodeInputs"></ul></div>
+              <div class="io-box"><b>输出</b><ul id="nodeOutputs"></ul></div>
+            </div>
+            <div id="nodeSource" class="source"></div>
+            <div id="nodeEvents" class="pill-row"></div>
+            <pre id="nodeReal"></pre>
+          </aside>
+        </div>
+      </section>
+
+      <section class="deep-only">
+        <h2>主干流程图</h2>
+        <p class="deep-only">这张图只看主链路：每张卡是一个关键函数/节点，箭头说明这一跳传递了什么数据。适合演示时快速串全链路。</p>
+        <div class="presentation-stage">
+          <div id="edgeList" class="edge-list"></div>
+          <aside class="focus-panel presentation-only" aria-live="polite">
+            <span class="focus-eyebrow">演示焦点</span>
+            <h3 id="focusTitle">main()</h3>
+            <p id="focusSub" class="focus-sub"></p>
+            <p id="focusSolves" class="focus-copy"></p>
+            <div class="focus-grid">
+              <div class="focus-box"><b>抓输入</b><ul id="focusInputs"></ul></div>
+              <div class="focus-box"><b>看输出</b><ul id="focusOutputs"></ul></div>
+            </div>
+            <div id="focusEvidence" class="focus-evidence"></div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="deep-only">
+        <h2>关键函数输入输出速查</h2>
+        <div class="table-wrap"><table id="criticalTable"></table></div>
+      </section>
+
+      <section class="deep-only">
+        <h2>update_slots() 运行解剖</h2>
+        <p>这块专门看一次真实请求里，<button class="term" data-term="update_slots()">update_slots()</button> 是怎样把 <button class="term" data-term="slot">slot</button> 一轮轮往前推的。</p>
+        <div class="update-overview">
+          <article class="update-step"><strong>1. 扫描 active slot</strong><small>看到 slot 3 / task 0</small></article>
+          <article class="update-step"><strong>2. 组织 batch</strong><small>prefill 57，后续 1</small></article>
+          <article class="update-step"><strong>3. llama_decode()</strong><small>前向计算，ret=0</small></article>
+          <article class="update-step"><strong>4. 采样并转文本</strong><small>token_id -> generated_text</small></article>
+          <article class="update-step"><strong>5. 决定是否继续</strong><small>第 8 轮 stop=LIMIT</small></article>
+        </div>
+        <div class="update-round-layout">
+          <div id="updateRoundList" class="update-round-list"></div>
+          <aside class="update-detail">
+            <h3 id="updateRoundTitle">Round 1</h3>
+            <p id="updateRoundSummary"></p>
+            <div class="update-detail-grid">
+              <div class="update-detail-box"><b>本轮输入</b><ul id="updateRoundInputs"></ul></div>
+              <div class="update-detail-box"><b>本轮输出</b><ul id="updateRoundOutputs"></ul></div>
+            </div>
+            <div id="updateRoundEvents" class="update-event-list"></div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="deep-only">
+        <h2>真实生成循环</h2>
+        <p>这里保留真实运行数据：第一次 decode 是 prompt prefill，后续 decode 每次接回一个 token，然后采样出下一个 token。</p>
+        <h3>decode 批次</h3>
+        <div class="table-wrap"><table id="batchTable"></table></div>
+        <h3 style="margin-top:16px">slot 状态变化</h3>
+        <div class="table-wrap"><table id="slotTable"></table></div>
+        <h3 style="margin-top:16px">token 逐步累积</h3>
+        <div class="table-wrap"><table id="tokenTable"></table></div>
+        <h3 style="margin-top:16px">NEXT_RESPONSE 内部 tick</h3>
+        <div class="table-wrap"><table id="nextTable"></table></div>
+      </section>
+
+      <section class="deep-only">
+        <h2>当前 trace 事件</h2>
+        <div class="layout">
+          <div class="box">
+            <h3 id="eventTitle">事件</h3>
+            <p id="eventExplanation"></p>
+            <div id="eventPills" class="pill-row"></div>
+          </div>
+          <div class="box">
+            <h3>事件 JSON</h3>
+            <pre id="eventJson"></pre>
+          </div>
+        </div>
+      </section>
+
+      <section class="deep-only">
+        <h2>请求、prompt、最终响应</h2>
+        <div class="layout">
+          <div class="box"><h3>HTTP 请求</h3><pre id="requestJson"></pre></div>
+          <div class="box"><h3>chat template 后的 prompt</h3><pre id="promptText"></pre></div>
+        </div>
+        <div class="box" style="margin-top:12px"><h3>HTTP 最终响应</h3><pre id="responseJson"></pre></div>
+      </section>
+
+      <section class="deep-only">
+        <h2>原始 trace JSONL</h2>
+        <pre id="rawTrace"></pre>
+      </section>
+    </main>
+    <aside class="glossary-side" aria-label="词汇浮层">
+      <h2>词汇浮层</h2>
+      <input id="glossarySearch" class="glossary-search" placeholder="搜索词汇 / 类比 / 解释">
+      <div id="glossarySearchMeta" class="glossary-count"></div>
+      <h3 id="glossaryTitle" class="glossary-title">main()</h3>
+      <span class="glossary-label">简单类比</span>
+      <p id="glossaryAnalogy" class="glossary-text"></p>
+      <span class="glossary-label">专业解释</span>
+      <p id="glossaryProfessional" class="glossary-text"></p>
+      <div id="glossarySource" class="glossary-source"></div>
+      <span class="glossary-label">相关词</span>
+      <div id="glossaryRelated" class="glossary-related"></div>
+      <h3 class="glossary-list-title">词表</h3>
+      <div id="glossaryGrid" class="glossary-grid"></div>
+    </aside>
+  </div>
+
+  <script>
+    const TRACE_EVENTS = [{"seq":0,"t_us":12094,"phase":"trace.open","data":{"path":"C:\\Users\\JinyangZhai\\llama-trace-work\\_run\\server-trace.jsonl","enabled":true}},{"seq":1,"t_us":12304,"phase":"main.args_parsed","data":{"argc":18,"model":"C:\\Users\\JinyangZhai\\llama-trace-work\\models\\stories260K.gguf","host":"127.0.0.1","port":18080,"n_parallel":1}},{"seq":2,"t_us":97559,"phase":"loop.update_slots.begin","data":{}},{"seq":3,"t_us":97673,"phase":"slots.update.begin","data":{"active_slots":[]}},{"seq":4,"t_us":97713,"phase":"slots.update.idle","data":{}},{"seq":5,"t_us":97783,"phase":"loop.update_slots.end","data":{}},{"seq":6,"t_us":38284842,"phase":"http.chat.request","data":{"path":"/v1/chat/completions","body":{"temperature":0,"messages":[{"content":"Say hello in one short sentence.","role":"user"}],"stream":false,"model":"tiny-stories","max_tokens":8}}},{"seq":7,"t_us":38284991,"phase":"http.chat.parsed","data":{"prompt":"\u003c|im_start|>user\nSay hello in one short sentence.\u003c|im_end|>\n\u003c|im_start|>assistant\n","stream":false,"n_files":0}},{"seq":8,"t_us":38285025,"phase":"http.completions_impl.begin","data":{"type":"COMPLETION","oaicompat":1,"stream":false,"has_prompt":true}},{"seq":9,"t_us":38286342,"phase":"http.prompt.tokenized","data":{"n_inputs":1,"input_token_counts":[57],"n_ctx_slot":128}},{"seq":10,"t_us":38286429,"phase":"http.task.created","data":{"task":{"id":0,"index":0,"type":"COMPLETION","id_target":-1,"id_slot":-1,"n_tokens":57,"stream":false,"n_predict":8,"cache_prompt":true,"oaicompat":1}}},{"seq":11,"t_us":38286477,"phase":"results.wait_add","data":{"task":{"id":0,"index":0,"type":"COMPLETION","id_target":-1,"id_slot":-1,"n_tokens":57,"stream":false,"n_predict":8,"cache_prompt":true,"oaicompat":1},"waiting_size_before":0}},{"seq":12,"t_us":38286512,"phase":"queue.post","data":{"front":false,"task":{"id":0,"index":0,"type":"COMPLETION","id_target":-1,"id_slot":-1,"n_tokens":57,"stream":false,"n_predict":8,"cache_prompt":true,"oaicompat":1},"queue_size_before":0,"deferred_size":0}},{"seq":13,"t_us":38286553,"phase":"http.tasks.posted","data":{"task_ids":[0],"completion_id":"chatcmpl-ryue1wYGFlFZI8qwwNkbTMMlWDCbIIcm"}},{"seq":14,"t_us":38286812,"phase":"loop.process_task","data":{"task":{"id":0,"index":0,"type":"COMPLETION","id_target":-1,"id_slot":-1,"n_tokens":57,"stream":false,"n_predict":8,"cache_prompt":true,"oaicompat":1},"queue_size_after_pop":0,"deferred_size":0}},{"seq":15,"t_us":38286853,"phase":"task.process.begin","data":{"task":{"id":0,"index":0,"type":"COMPLETION","id_target":-1,"id_slot":-1,"n_tokens":57,"stream":false,"n_predict":8,"cache_prompt":true,"oaicompat":1}}},{"seq":16,"t_us":38286904,"phase":"task.slot_lookup","data":{"task":{"id":0,"index":0,"type":"COMPLETION","id_target":-1,"id_slot":-1,"n_tokens":57,"stream":false,"n_predict":8,"cache_prompt":true,"oaicompat":1},"requested_slot":-1,"selected_slot":3,"selected_slot_processing":false}},{"seq":17,"t_us":38291454,"phase":"slot.launch.begin","data":{"slot_id":3,"slot_state":"IDLE","task":{"id":0,"index":0,"type":"COMPLETION","id_target":-1,"id_slot":-1,"n_tokens":57,"stream":false,"n_predict":8,"cache_prompt":true,"oaicompat":1}}},{"seq":18,"t_us":38291745,"phase":"slot.launch.end","data":{"slot_id":3,"slot_state":"STARTED","task_id":0,"task_tokens":57,"n_ctx":128}},{"seq":19,"t_us":38291788,"phase":"loop.update_slots.begin","data":{}},{"seq":20,"t_us":38291816,"phase":"slots.update.begin","data":{"active_slots":[{"slot_id":3,"state":"STARTED","task_id":0,"prompt_tokens":0,"n_decoded":0,"n_ctx":128}]}},{"seq":21,"t_us":38291855,"phase":"queue.post","data":{"front":false,"task":{"id":1,"index":-1,"type":"NEXT_RESPONSE","id_target":-1,"id_slot":-1,"n_tokens":0,"stream":true,"n_predict":-1,"cache_prompt":true,"oaicompat":0},"queue_size_before":0,"deferred_size":0}},{"seq":22,"t_us":38292028,"phase":"decode.begin","data":{"batch_offset":0,"batch_tokens":57,"batch_total_tokens":57,"n_batch":128}},{"seq":23,"t_us":38384808,"phase":"decode.end","data":{"batch_offset":0,"batch_tokens":57,"ret":0}},{"seq":24,"t_us":38384855,"phase":"slot.prompt_done","data":{"slot_id":3,"task_id":0,"prompt_tokens":57,"cached_tokens":0}},{"seq":25,"t_us":38385027,"phase":"sample.token","data":{"slot_id":3,"task_id":0,"tok_idx":56,"token_id":436}},{"seq":26,"t_us":38385090,"phase":"token.processed","data":{"slot_id":3,"task_id":0,"token_id":436,"text_to_send":"\"","generated_text":"\"","n_decoded":1,"has_next_token":true,"stop":"NONE"}},{"seq":27,"t_us":38385117,"phase":"loop.update_slots.end","data":{}},{"seq":28,"t_us":38385144,"phase":"loop.process_task","data":{"task":{"id":1,"index":-1,"type":"NEXT_RESPONSE","id_target":-1,"id_slot":-1,"n_tokens":0,"stream":true,"n_predict":-1,"cache_prompt":true,"oaicompat":0},"queue_size_after_pop":0,"deferred_size":0}},{"seq":29,"t_us":38385172,"phase":"task.process.begin","data":{"task":{"id":1,"index":-1,"type":"NEXT_RESPONSE","id_target":-1,"id_slot":-1,"n_tokens":0,"stream":true,"n_predict":-1,"cache_prompt":true,"oaicompat":0}}},{"seq":30,"t_us":38385191,"phase":"loop.update_slots.begin","data":{}},{"seq":31,"t_us":38385210,"phase":"slots.update.begin","data":{"active_slots":[{"slot_id":3,"state":"GENERATING","task_id":0,"prompt_tokens":57,"n_decoded":1,"n_ctx":128}]}},{"seq":32,"t_us":38385240,"phase":"queue.post","data":{"front":false,"task":{"id":2,"index":-1,"type":"NEXT_RESPONSE","id_target":-1,"id_slot":-1,"n_tokens":0,"stream":true,"n_predict":-1,"cache_prompt":true,"oaicompat":0},"queue_size_before":0,"deferred_size":0}},{"seq":33,"t_us":38385326,"phase":"decode.begin","data":{"batch_offset":0,"batch_tokens":1,"batch_total_tokens":1,"n_batch":128}},{"seq":34,"t_us":38484486,"phase":"decode.end","data":{"batch_offset":0,"batch_tokens":1,"ret":0}},{"seq":35,"t_us":38484558,"phase":"sample.token","data":{"slot_id":3,"task_id":0,"tok_idx":0,"token_id":440}},{"seq":36,"t_us":38484590,"phase":"token.processed","data":{"slot_id":3,"task_id":0,"token_id":440,"text_to_send":"H","generated_text":"\"H","n_decoded":2,"has_next_token":true,"stop":"NONE"}},{"seq":37,"t_us":38484612,"phase":"loop.update_slots.end","data":{}},{"seq":38,"t_us":38484640,"phase":"loop.process_task","data":{"task":{"id":2,"index":-1,"type":"NEXT_RESPONSE","id_target":-1,"id_slot":-1,"n_tokens":0,"stream":true,"n_predict":-1,"cache_prompt":true,"oaicompat":0},"queue_size_after_pop":0,"deferred_size":0}},{"seq":39,"t_us":38484667,"phase":"task.process.begin","data":{"task":{"id":2,"index":-1,"type":"NEXT_RESPONSE","id_target":-1,"id_slot":-1,"n_tokens":0,"stream":true,"n_predict":-1,"cache_prompt":true,"oaicompat":0}}},{"seq":40,"t_us":38484685,"phase":"loop.update_slots.begin","data":{}},{"seq":41,"t_us":38484704,"phase":"slots.update.begin","data":{"active_slots":[{"slot_id":3,"state":"GENERATING","task_id":0,"prompt_tokens":58,"n_decoded":2,"n_ctx":128}]}},{"seq":42,"t_us":38484732,"phase":"queue.post","data":{"front":false,"task":{"id":3,"index":-1,"type":"NEXT_RESPONSE","id_target":-1,"id_slot":-1,"n_tokens":0,"stream":true,"n_predict":-1,"cache_prompt":true,"oaicompat":0},"queue_size_before":0,"deferred_size":0}},{"seq":43,"t_us":38484809,"phase":"decode.begin","data":{"batch_offset":0,"batch_tokens":1,"batch_total_tokens":1,"n_batch":128}},{"seq":44,"t_us":38581949,"phase":"decode.end","data":{"batch_offset":0,"batch_tokens":1,"ret":0}},{"seq":45,"t_us":38582021,"phase":"sample.token","data":{"slot_id":3,"task_id":0,"tok_idx":0,"token_id":411}},{"seq":46,"t_us":38582055,"phase":"token.processed","data":{"slot_id":3,"task_id":0,"token_id":411,"text_to_send":"e","generated_text":"\"He","n_decoded":3,"has_next_token":true,"stop":"NONE"}},{"seq":47,"t_us":38582078,"phase":"loop.update_slots.end","data":{}},{"seq":48,"t_us":38582106,"phase":"loop.process_task","data":{"task":{"id":3,"index":-1,"type":"NEXT_RESPONSE","id_target":-1,"id_slot":-1,"n_tokens":0,"stream":true,"n_predict":-1,"cache_prompt":true,"oaicompat":0},"queue_size_after_pop":0,"deferred_size":0}},{"seq":49,"t_us":38582133,"phase":"task.process.begin","data":{"task":{"id":3,"index":-1,"type":"NEXT_RESPONSE","id_target":-1,"id_slot":-1,"n_tokens":0,"stream":true,"n_predict":-1,"cache_prompt":true,"oaicompat":0}}},{"seq":50,"t_us":38582214,"phase":"loop.update_slots.begin","data":{}},{"seq":51,"t_us":38582243,"phase":"slots.update.begin","data":{"active_slots":[{"slot_id":3,"state":"GENERATING","task_id":0,"prompt_tokens":59,"n_decoded":3,"n_ctx":128}]}},{"seq":52,"t_us":38582276,"phase":"queue.post","data":{"front":false,"task":{"id":4,"index":-1,"type":"NEXT_RESPONSE","id_target":-1,"id_slot":-1,"n_tokens":0,"stream":true,"n_predict":-1,"cache_prompt":true,"oaicompat":0},"queue_size_before":0,"deferred_size":0}},{"seq":53,"t_us":38582388,"phase":"decode.begin","data":{"batch_offset":0,"batch_tokens":1,"batch_total_tokens":1,"n_batch":128}},{"seq":54,"t_us":38711774,"phase":"decode.end","data":{"batch_offset":0,"batch_tokens":1,"ret":0}},{"seq":55,"t_us":38711914,"phase":"sample.token","data":{"slot_id":3,"task_id":0,"tok_idx":0,"token_id":276}},{"seq":56,"t_us":38711964,"phase":"token.processed","data":{"slot_id":3,"task_id":0,"token_id":276,"text_to_send":"re","generated_text":"\"Here","n_decoded":4,"has_next_token":true,"stop":"NONE"}},{"seq":57,"t_us":38711992,"phase":"loop.update_slots.end","data":{}},{"seq":58,"t_us":38712030,"phase":"loop.process_task","data":{"task":{"id":4,"index":-1,"type":"NEXT_RESPONSE","id_target":-1,"id_slot":-1,"n_tokens":0,"stream":true,"n_predict":-1,"cache_prompt":true,"oaicompat":0},"queue_size_after_pop":0,"deferred_size":0}},{"seq":59,"t_us":38712059,"phase":"task.process.begin","data":{"task":{"id":4,"index":-1,"type":"NEXT_RESPONSE","id_target":-1,"id_slot":-1,"n_tokens":0,"stream":true,"n_predict":-1,"cache_prompt":true,"oaicompat":0}}},{"seq":60,"t_us":38712079,"phase":"loop.update_slots.begin","data":{}},{"seq":61,"t_us":38712100,"phase":"slots.update.begin","data":{"active_slots":[{"slot_id":3,"state":"GENERATING","task_id":0,"prompt_tokens":60,"n_decoded":4,"n_ctx":128}]}},{"seq":62,"t_us":38712132,"phase":"queue.post","data":{"front":false,"task":{"id":5,"index":-1,"type":"NEXT_RESPONSE","id_target":-1,"id_slot":-1,"n_tokens":0,"stream":true,"n_predict":-1,"cache_prompt":true,"oaicompat":0},"queue_size_before":0,"deferred_size":0}},{"seq":63,"t_us":38712194,"phase":"decode.begin","data":{"batch_offset":0,"batch_tokens":1,"batch_total_tokens":1,"n_batch":128}},{"seq":64,"t_us":38827972,"phase":"decode.end","data":{"batch_offset":0,"batch_tokens":1,"ret":0}},{"seq":65,"t_us":38828052,"phase":"sample.token","data":{"slot_id":3,"task_id":0,"tok_idx":0,"token_id":443}},{"seq":66,"t_us":38828088,"phase":"token.processed","data":{"slot_id":3,"task_id":0,"token_id":443,"text_to_send":"!","generated_text":"\"Here!","n_decoded":5,"has_next_token":true,"stop":"NONE"}},{"seq":67,"t_us":38828110,"phase":"loop.update_slots.end","data":{}},{"seq":68,"t_us":38828139,"phase":"loop.process_task","data":{"task":{"id":5,"index":-1,"type":"NEXT_RESPONSE","id_target":-1,"id_slot":-1,"n_tokens":0,"stream":true,"n_predict":-1,"cache_prompt":true,"oaicompat":0},"queue_size_after_pop":0,"deferred_size":0}},{"seq":69,"t_us":38828168,"phase":"task.process.begin","data":{"task":{"id":5,"index":-1,"type":"NEXT_RESPONSE","id_target":-1,"id_slot":-1,"n_tokens":0,"stream":true,"n_predict":-1,"cache_prompt":true,"oaicompat":0}}},{"seq":70,"t_us":38828187,"phase":"loop.update_slots.begin","data":{}},{"seq":71,"t_us":38828207,"phase":"slots.update.begin","data":{"active_slots":[{"slot_id":3,"state":"GENERATING","task_id":0,"prompt_tokens":61,"n_decoded":5,"n_ctx":128}]}},{"seq":72,"t_us":38828235,"phase":"queue.post","data":{"front":false,"task":{"id":6,"index":-1,"type":"NEXT_RESPONSE","id_target":-1,"id_slot":-1,"n_tokens":0,"stream":true,"n_predict":-1,"cache_prompt":true,"oaicompat":0},"queue_size_before":0,"deferred_size":0}},{"seq":73,"t_us":38828292,"phase":"decode.begin","data":{"batch_offset":0,"batch_tokens":1,"batch_total_tokens":1,"n_batch":128}},{"seq":74,"t_us":38881390,"phase":"decode.end","data":{"batch_offset":0,"batch_tokens":1,"ret":0}},{"seq":75,"t_us":38881739,"phase":"sample.token","data":{"slot_id":3,"task_id":0,"tok_idx":0,"token_id":436}},{"seq":76,"t_us":38881906,"phase":"token.processed","data":{"slot_id":3,"task_id":0,"token_id":436,"text_to_send":"\"","generated_text":"\"Here!\"","n_decoded":6,"has_next_token":true,"stop":"NONE"}},{"seq":77,"t_us":38881944,"phase":"loop.update_slots.end","data":{}},{"seq":78,"t_us":38881975,"phase":"loop.process_task","data":{"task":{"id":6,"index":-1,"type":"NEXT_RESPONSE","id_target":-1,"id_slot":-1,"n_tokens":0,"stream":true,"n_predict":-1,"cache_prompt":true,"oaicompat":0},"queue_size_after_pop":0,"deferred_size":0}},{"seq":79,"t_us":38882003,"phase":"task.process.begin","data":{"task":{"id":6,"index":-1,"type":"NEXT_RESPONSE","id_target":-1,"id_slot":-1,"n_tokens":0,"stream":true,"n_predict":-1,"cache_prompt":true,"oaicompat":0}}},{"seq":80,"t_us":38882055,"phase":"loop.update_slots.begin","data":{}},{"seq":81,"t_us":38882129,"phase":"slots.update.begin","data":{"active_slots":[{"slot_id":3,"state":"GENERATING","task_id":0,"prompt_tokens":62,"n_decoded":6,"n_ctx":128}]}},{"seq":82,"t_us":38893857,"phase":"queue.post","data":{"front":false,"task":{"id":7,"index":-1,"type":"NEXT_RESPONSE","id_target":-1,"id_slot":-1,"n_tokens":0,"stream":true,"n_predict":-1,"cache_prompt":true,"oaicompat":0},"queue_size_before":0,"deferred_size":0}},{"seq":83,"t_us":38894138,"phase":"decode.begin","data":{"batch_offset":0,"batch_tokens":1,"batch_total_tokens":1,"n_batch":128}},{"seq":84,"t_us":39048520,"phase":"decode.end","data":{"batch_offset":0,"batch_tokens":1,"ret":0}},{"seq":85,"t_us":39048601,"phase":"sample.token","data":{"slot_id":3,"task_id":0,"tok_idx":0,"token_id":410}},{"seq":86,"t_us":39048642,"phase":"token.processed","data":{"slot_id":3,"task_id":0,"token_id":410,"text_to_send":" ","generated_text":"\"Here!\" ","n_decoded":7,"has_next_token":true,"stop":"NONE"}},{"seq":87,"t_us":39048666,"phase":"loop.update_slots.end","data":{}},{"seq":88,"t_us":39048697,"phase":"loop.process_task","data":{"task":{"id":7,"index":-1,"type":"NEXT_RESPONSE","id_target":-1,"id_slot":-1,"n_tokens":0,"stream":true,"n_predict":-1,"cache_prompt":true,"oaicompat":0},"queue_size_after_pop":0,"deferred_size":0}},{"seq":89,"t_us":39048727,"phase":"task.process.begin","data":{"task":{"id":7,"index":-1,"type":"NEXT_RESPONSE","id_target":-1,"id_slot":-1,"n_tokens":0,"stream":true,"n_predict":-1,"cache_prompt":true,"oaicompat":0}}},{"seq":90,"t_us":39048745,"phase":"loop.update_slots.begin","data":{}},{"seq":91,"t_us":39048766,"phase":"slots.update.begin","data":{"active_slots":[{"slot_id":3,"state":"GENERATING","task_id":0,"prompt_tokens":63,"n_decoded":7,"n_ctx":128}]}},{"seq":92,"t_us":39048796,"phase":"queue.post","data":{"front":false,"task":{"id":8,"index":-1,"type":"NEXT_RESPONSE","id_target":-1,"id_slot":-1,"n_tokens":0,"stream":true,"n_predict":-1,"cache_prompt":true,"oaicompat":0},"queue_size_before":0,"deferred_size":0}},{"seq":93,"t_us":39048979,"phase":"decode.begin","data":{"batch_offset":0,"batch_tokens":1,"batch_total_tokens":1,"n_batch":128}},{"seq":94,"t_us":39182403,"phase":"decode.end","data":{"batch_offset":0,"batch_tokens":1,"ret":0}},{"seq":95,"t_us":39182484,"phase":"sample.token","data":{"slot_id":3,"task_id":0,"tok_idx":0,"token_id":447}},{"seq":96,"t_us":39182518,"phase":"token.processed","data":{"slot_id":3,"task_id":0,"token_id":447,"text_to_send":"A","generated_text":"\"Here!\" A","n_decoded":8,"has_next_token":false,"stop":"LIMIT"}},{"seq":97,"t_us":39182627,"phase":"response.final","data":{"task_id":0,"slot_id":3,"content":"\"Here!\" A","n_decoded":8,"n_prompt_tokens":57,"n_tokens_cached":64,"truncated":false,"stop":"LIMIT"}},{"seq":98,"t_us":39182655,"phase":"results.send","data":{"id":0,"is_stop":true,"is_error":false,"queue_size_before":0}},{"seq":99,"t_us":39182688,"phase":"loop.update_slots.end","data":{}},{"seq":100,"t_us":39182704,"phase":"results.recv","data":{"id":0,"is_stop":true,"is_error":false,"queue_size_after":0}},{"seq":101,"t_us":39182749,"phase":"loop.process_task","data":{"task":{"id":8,"index":-1,"type":"NEXT_RESPONSE","id_target":-1,"id_slot":-1,"n_tokens":0,"stream":true,"n_predict":-1,"cache_prompt":true,"oaicompat":0},"queue_size_after_pop":0,"deferred_size":0}},{"seq":102,"t_us":39182837,"phase":"task.process.begin","data":{"task":{"id":8,"index":-1,"type":"NEXT_RESPONSE","id_target":-1,"id_slot":-1,"n_tokens":0,"stream":true,"n_predict":-1,"cache_prompt":true,"oaicompat":0}}},{"seq":103,"t_us":39182863,"phase":"loop.update_slots.begin","data":{}},{"seq":104,"t_us":39182878,"phase":"slots.update.begin","data":{"active_slots":[]}},{"seq":105,"t_us":39182892,"phase":"slots.update.idle","data":{}},{"seq":106,"t_us":39182903,"phase":"loop.update_slots.end","data":{}}];
+    const REQUEST_JSON = {"temperature":0,"messages":[{"content":"Say hello in one short sentence.","role":"user"}],"stream":false,"model":"tiny-stories","max_tokens":8};
+    const RESPONSE_JSON = {"choices":[{"finish_reason":"length","index":0,"message":{"role":"assistant","content":"\"Here!\" A"}}],"created":1778477511,"model":"tiny-stories","system_fingerprint":"b1-1f5accb","object":"chat.completion","usage":{"completion_tokens":8,"prompt_tokens":57,"total_tokens":65},"id":"chatcmpl-ryue1wYGFlFZI8qwwNkbTMMlWDCbIIcm","timings":{"cache_n":0,"prompt_n":57,"prompt_ms":93.186,"prompt_per_token_ms":1.634842105263158,"prompt_per_second":611.6798660743029,"predicted_n":8,"predicted_ms":797.441,"predicted_per_token_ms":99.680125,"predicted_per_second":10.032090148362073}};
+    const PROMPT_TEXT = "\u003c|im_start|>user\nSay hello in one short sentence.\u003c|im_end|>\n\u003c|im_start|>assistant\n";
+    const RAW_TRACE = "{\"seq\":0,\"t_us\":12094,\"phase\":\"trace.open\",\"data\":{\"path\":\"C:\\\\Users\\\\JinyangZhai\\\\llama-trace-work\\\\_run\\\\server-trace.jsonl\",\"enabled\":true}}\r\n{\"seq\":1,\"t_us\":12304,\"phase\":\"main.args_parsed\",\"data\":{\"argc\":18,\"model\":\"C:\\\\Users\\\\JinyangZhai\\\\llama-trace-work\\\\models\\\\stories260K.gguf\",\"host\":\"127.0.0.1\",\"port\":18080,\"n_parallel\":1}}\r\n{\"seq\":2,\"t_us\":97559,\"phase\":\"loop.update_slots.begin\",\"data\":{}}\r\n{\"seq\":3,\"t_us\":97673,\"phase\":\"slots.update.begin\",\"data\":{\"active_slots\":[]}}\r\n{\"seq\":4,\"t_us\":97713,\"phase\":\"slots.update.idle\",\"data\":{}}\r\n{\"seq\":5,\"t_us\":97783,\"phase\":\"loop.update_slots.end\",\"data\":{}}\r\n{\"seq\":6,\"t_us\":38284842,\"phase\":\"http.chat.request\",\"data\":{\"path\":\"/v1/chat/completions\",\"body\":{\"temperature\":0,\"messages\":[{\"content\":\"Say hello in one short sentence.\",\"role\":\"user\"}],\"stream\":false,\"model\":\"tiny-stories\",\"max_tokens\":8}}}\r\n{\"seq\":7,\"t_us\":38284991,\"phase\":\"http.chat.parsed\",\"data\":{\"prompt\":\"\u003c|im_start|>user\\nSay hello in one short sentence.\u003c|im_end|>\\n\u003c|im_start|>assistant\\n\",\"stream\":false,\"n_files\":0}}\r\n{\"seq\":8,\"t_us\":38285025,\"phase\":\"http.completions_impl.begin\",\"data\":{\"type\":\"COMPLETION\",\"oaicompat\":1,\"stream\":false,\"has_prompt\":true}}\r\n{\"seq\":9,\"t_us\":38286342,\"phase\":\"http.prompt.tokenized\",\"data\":{\"n_inputs\":1,\"input_token_counts\":[57],\"n_ctx_slot\":128}}\r\n{\"seq\":10,\"t_us\":38286429,\"phase\":\"http.task.created\",\"data\":{\"task\":{\"id\":0,\"index\":0,\"type\":\"COMPLETION\",\"id_target\":-1,\"id_slot\":-1,\"n_tokens\":57,\"stream\":false,\"n_predict\":8,\"cache_prompt\":true,\"oaicompat\":1}}}\r\n{\"seq\":11,\"t_us\":38286477,\"phase\":\"results.wait_add\",\"data\":{\"task\":{\"id\":0,\"index\":0,\"type\":\"COMPLETION\",\"id_target\":-1,\"id_slot\":-1,\"n_tokens\":57,\"stream\":false,\"n_predict\":8,\"cache_prompt\":true,\"oaicompat\":1},\"waiting_size_before\":0}}\r\n{\"seq\":12,\"t_us\":38286512,\"phase\":\"queue.post\",\"data\":{\"front\":false,\"task\":{\"id\":0,\"index\":0,\"type\":\"COMPLETION\",\"id_target\":-1,\"id_slot\":-1,\"n_tokens\":57,\"stream\":false,\"n_predict\":8,\"cache_prompt\":true,\"oaicompat\":1},\"queue_size_before\":0,\"deferred_size\":0}}\r\n{\"seq\":13,\"t_us\":38286553,\"phase\":\"http.tasks.posted\",\"data\":{\"task_ids\":[0],\"completion_id\":\"chatcmpl-ryue1wYGFlFZI8qwwNkbTMMlWDCbIIcm\"}}\r\n{\"seq\":14,\"t_us\":38286812,\"phase\":\"loop.process_task\",\"data\":{\"task\":{\"id\":0,\"index\":0,\"type\":\"COMPLETION\",\"id_target\":-1,\"id_slot\":-1,\"n_tokens\":57,\"stream\":false,\"n_predict\":8,\"cache_prompt\":true,\"oaicompat\":1},\"queue_size_after_pop\":0,\"deferred_size\":0}}\r\n{\"seq\":15,\"t_us\":38286853,\"phase\":\"task.process.begin\",\"data\":{\"task\":{\"id\":0,\"index\":0,\"type\":\"COMPLETION\",\"id_target\":-1,\"id_slot\":-1,\"n_tokens\":57,\"stream\":false,\"n_predict\":8,\"cache_prompt\":true,\"oaicompat\":1}}}\r\n{\"seq\":16,\"t_us\":38286904,\"phase\":\"task.slot_lookup\",\"data\":{\"task\":{\"id\":0,\"index\":0,\"type\":\"COMPLETION\",\"id_target\":-1,\"id_slot\":-1,\"n_tokens\":57,\"stream\":false,\"n_predict\":8,\"cache_prompt\":true,\"oaicompat\":1},\"requested_slot\":-1,\"selected_slot\":3,\"selected_slot_processing\":false}}\r\n{\"seq\":17,\"t_us\":38291454,\"phase\":\"slot.launch.begin\",\"data\":{\"slot_id\":3,\"slot_state\":\"IDLE\",\"task\":{\"id\":0,\"index\":0,\"type\":\"COMPLETION\",\"id_target\":-1,\"id_slot\":-1,\"n_tokens\":57,\"stream\":false,\"n_predict\":8,\"cache_prompt\":true,\"oaicompat\":1}}}\r\n{\"seq\":18,\"t_us\":38291745,\"phase\":\"slot.launch.end\",\"data\":{\"slot_id\":3,\"slot_state\":\"STARTED\",\"task_id\":0,\"task_tokens\":57,\"n_ctx\":128}}\r\n{\"seq\":19,\"t_us\":38291788,\"phase\":\"loop.update_slots.begin\",\"data\":{}}\r\n{\"seq\":20,\"t_us\":38291816,\"phase\":\"slots.update.begin\",\"data\":{\"active_slots\":[{\"slot_id\":3,\"state\":\"STARTED\",\"task_id\":0,\"prompt_tokens\":0,\"n_decoded\":0,\"n_ctx\":128}]}}\r\n{\"seq\":21,\"t_us\":38291855,\"phase\":\"queue.post\",\"data\":{\"front\":false,\"task\":{\"id\":1,\"index\":-1,\"type\":\"NEXT_RESPONSE\",\"id_target\":-1,\"id_slot\":-1,\"n_tokens\":0,\"stream\":true,\"n_predict\":-1,\"cache_prompt\":true,\"oaicompat\":0},\"queue_size_before\":0,\"deferred_size\":0}}\r\n{\"seq\":22,\"t_us\":38292028,\"phase\":\"decode.begin\",\"data\":{\"batch_offset\":0,\"batch_tokens\":57,\"batch_total_tokens\":57,\"n_batch\":128}}\r\n{\"seq\":23,\"t_us\":38384808,\"phase\":\"decode.end\",\"data\":{\"batch_offset\":0,\"batch_tokens\":57,\"ret\":0}}\r\n{\"seq\":24,\"t_us\":38384855,\"phase\":\"slot.prompt_done\",\"data\":{\"slot_id\":3,\"task_id\":0,\"prompt_tokens\":57,\"cached_tokens\":0}}\r\n{\"seq\":25,\"t_us\":38385027,\"phase\":\"sample.token\",\"data\":{\"slot_id\":3,\"task_id\":0,\"tok_idx\":56,\"token_id\":436}}\r\n{\"seq\":26,\"t_us\":38385090,\"phase\":\"token.processed\",\"data\":{\"slot_id\":3,\"task_id\":0,\"token_id\":436,\"text_to_send\":\"\\\"\",\"generated_text\":\"\\\"\",\"n_decoded\":1,\"has_next_token\":true,\"stop\":\"NONE\"}}\r\n{\"seq\":27,\"t_us\":38385117,\"phase\":\"loop.update_slots.end\",\"data\":{}}\r\n{\"seq\":28,\"t_us\":38385144,\"phase\":\"loop.process_task\",\"data\":{\"task\":{\"id\":1,\"index\":-1,\"type\":\"NEXT_RESPONSE\",\"id_target\":-1,\"id_slot\":-1,\"n_tokens\":0,\"stream\":true,\"n_predict\":-1,\"cache_prompt\":true,\"oaicompat\":0},\"queue_size_after_pop\":0,\"deferred_size\":0}}\r\n{\"seq\":29,\"t_us\":38385172,\"phase\":\"task.process.begin\",\"data\":{\"task\":{\"id\":1,\"index\":-1,\"type\":\"NEXT_RESPONSE\",\"id_target\":-1,\"id_slot\":-1,\"n_tokens\":0,\"stream\":true,\"n_predict\":-1,\"cache_prompt\":true,\"oaicompat\":0}}}\r\n{\"seq\":30,\"t_us\":38385191,\"phase\":\"loop.update_slots.begin\",\"data\":{}}\r\n{\"seq\":31,\"t_us\":38385210,\"phase\":\"slots.update.begin\",\"data\":{\"active_slots\":[{\"slot_id\":3,\"state\":\"GENERATING\",\"task_id\":0,\"prompt_tokens\":57,\"n_decoded\":1,\"n_ctx\":128}]}}\r\n{\"seq\":32,\"t_us\":38385240,\"phase\":\"queue.post\",\"data\":{\"front\":false,\"task\":{\"id\":2,\"index\":-1,\"type\":\"NEXT_RESPONSE\",\"id_target\":-1,\"id_slot\":-1,\"n_tokens\":0,\"stream\":true,\"n_predict\":-1,\"cache_prompt\":true,\"oaicompat\":0},\"queue_size_before\":0,\"deferred_size\":0}}\r\n{\"seq\":33,\"t_us\":38385326,\"phase\":\"decode.begin\",\"data\":{\"batch_offset\":0,\"batch_tokens\":1,\"batch_total_tokens\":1,\"n_batch\":128}}\r\n{\"seq\":34,\"t_us\":38484486,\"phase\":\"decode.end\",\"data\":{\"batch_offset\":0,\"batch_tokens\":1,\"ret\":0}}\r\n{\"seq\":35,\"t_us\":38484558,\"phase\":\"sample.token\",\"data\":{\"slot_id\":3,\"task_id\":0,\"tok_idx\":0,\"token_id\":440}}\r\n{\"seq\":36,\"t_us\":38484590,\"phase\":\"token.processed\",\"data\":{\"slot_id\":3,\"task_id\":0,\"token_id\":440,\"text_to_send\":\"H\",\"generated_text\":\"\\\"H\",\"n_decoded\":2,\"has_next_token\":true,\"stop\":\"NONE\"}}\r\n{\"seq\":37,\"t_us\":38484612,\"phase\":\"loop.update_slots.end\",\"data\":{}}\r\n{\"seq\":38,\"t_us\":38484640,\"phase\":\"loop.process_task\",\"data\":{\"task\":{\"id\":2,\"index\":-1,\"type\":\"NEXT_RESPONSE\",\"id_target\":-1,\"id_slot\":-1,\"n_tokens\":0,\"stream\":true,\"n_predict\":-1,\"cache_prompt\":true,\"oaicompat\":0},\"queue_size_after_pop\":0,\"deferred_size\":0}}\r\n{\"seq\":39,\"t_us\":38484667,\"phase\":\"task.process.begin\",\"data\":{\"task\":{\"id\":2,\"index\":-1,\"type\":\"NEXT_RESPONSE\",\"id_target\":-1,\"id_slot\":-1,\"n_tokens\":0,\"stream\":true,\"n_predict\":-1,\"cache_prompt\":true,\"oaicompat\":0}}}\r\n{\"seq\":40,\"t_us\":38484685,\"phase\":\"loop.update_slots.begin\",\"data\":{}}\r\n{\"seq\":41,\"t_us\":38484704,\"phase\":\"slots.update.begin\",\"data\":{\"active_slots\":[{\"slot_id\":3,\"state\":\"GENERATING\",\"task_id\":0,\"prompt_tokens\":58,\"n_decoded\":2,\"n_ctx\":128}]}}\r\n{\"seq\":42,\"t_us\":38484732,\"phase\":\"queue.post\",\"data\":{\"front\":false,\"task\":{\"id\":3,\"index\":-1,\"type\":\"NEXT_RESPONSE\",\"id_target\":-1,\"id_slot\":-1,\"n_tokens\":0,\"stream\":true,\"n_predict\":-1,\"cache_prompt\":true,\"oaicompat\":0},\"queue_size_before\":0,\"deferred_size\":0}}\r\n{\"seq\":43,\"t_us\":38484809,\"phase\":\"decode.begin\",\"data\":{\"batch_offset\":0,\"batch_tokens\":1,\"batch_total_tokens\":1,\"n_batch\":128}}\r\n{\"seq\":44,\"t_us\":38581949,\"phase\":\"decode.end\",\"data\":{\"batch_offset\":0,\"batch_tokens\":1,\"ret\":0}}\r\n{\"seq\":45,\"t_us\":38582021,\"phase\":\"sample.token\",\"data\":{\"slot_id\":3,\"task_id\":0,\"tok_idx\":0,\"token_id\":411}}\r\n{\"seq\":46,\"t_us\":38582055,\"phase\":\"token.processed\",\"data\":{\"slot_id\":3,\"task_id\":0,\"token_id\":411,\"text_to_send\":\"e\",\"generated_text\":\"\\\"He\",\"n_decoded\":3,\"has_next_token\":true,\"stop\":\"NONE\"}}\r\n{\"seq\":47,\"t_us\":38582078,\"phase\":\"loop.update_slots.end\",\"data\":{}}\r\n{\"seq\":48,\"t_us\":38582106,\"phase\":\"loop.process_task\",\"data\":{\"task\":{\"id\":3,\"index\":-1,\"type\":\"NEXT_RESPONSE\",\"id_target\":-1,\"id_slot\":-1,\"n_tokens\":0,\"stream\":true,\"n_predict\":-1,\"cache_prompt\":true,\"oaicompat\":0},\"queue_size_after_pop\":0,\"deferred_size\":0}}\r\n{\"seq\":49,\"t_us\":38582133,\"phase\":\"task.process.begin\",\"data\":{\"task\":{\"id\":3,\"index\":-1,\"type\":\"NEXT_RESPONSE\",\"id_target\":-1,\"id_slot\":-1,\"n_tokens\":0,\"stream\":true,\"n_predict\":-1,\"cache_prompt\":true,\"oaicompat\":0}}}\r\n{\"seq\":50,\"t_us\":38582214,\"phase\":\"loop.update_slots.begin\",\"data\":{}}\r\n{\"seq\":51,\"t_us\":38582243,\"phase\":\"slots.update.begin\",\"data\":{\"active_slots\":[{\"slot_id\":3,\"state\":\"GENERATING\",\"task_id\":0,\"prompt_tokens\":59,\"n_decoded\":3,\"n_ctx\":128}]}}\r\n{\"seq\":52,\"t_us\":38582276,\"phase\":\"queue.post\",\"data\":{\"front\":false,\"task\":{\"id\":4,\"index\":-1,\"type\":\"NEXT_RESPONSE\",\"id_target\":-1,\"id_slot\":-1,\"n_tokens\":0,\"stream\":true,\"n_predict\":-1,\"cache_prompt\":true,\"oaicompat\":0},\"queue_size_before\":0,\"deferred_size\":0}}\r\n{\"seq\":53,\"t_us\":38582388,\"phase\":\"decode.begin\",\"data\":{\"batch_offset\":0,\"batch_tokens\":1,\"batch_total_tokens\":1,\"n_batch\":128}}\r\n{\"seq\":54,\"t_us\":38711774,\"phase\":\"decode.end\",\"data\":{\"batch_offset\":0,\"batch_tokens\":1,\"ret\":0}}\r\n{\"seq\":55,\"t_us\":38711914,\"phase\":\"sample.token\",\"data\":{\"slot_id\":3,\"task_id\":0,\"tok_idx\":0,\"token_id\":276}}\r\n{\"seq\":56,\"t_us\":38711964,\"phase\":\"token.processed\",\"data\":{\"slot_id\":3,\"task_id\":0,\"token_id\":276,\"text_to_send\":\"re\",\"generated_text\":\"\\\"Here\",\"n_decoded\":4,\"has_next_token\":true,\"stop\":\"NONE\"}}\r\n{\"seq\":57,\"t_us\":38711992,\"phase\":\"loop.update_slots.end\",\"data\":{}}\r\n{\"seq\":58,\"t_us\":38712030,\"phase\":\"loop.process_task\",\"data\":{\"task\":{\"id\":4,\"index\":-1,\"type\":\"NEXT_RESPONSE\",\"id_target\":-1,\"id_slot\":-1,\"n_tokens\":0,\"stream\":true,\"n_predict\":-1,\"cache_prompt\":true,\"oaicompat\":0},\"queue_size_after_pop\":0,\"deferred_size\":0}}\r\n{\"seq\":59,\"t_us\":38712059,\"phase\":\"task.process.begin\",\"data\":{\"task\":{\"id\":4,\"index\":-1,\"type\":\"NEXT_RESPONSE\",\"id_target\":-1,\"id_slot\":-1,\"n_tokens\":0,\"stream\":true,\"n_predict\":-1,\"cache_prompt\":true,\"oaicompat\":0}}}\r\n{\"seq\":60,\"t_us\":38712079,\"phase\":\"loop.update_slots.begin\",\"data\":{}}\r\n{\"seq\":61,\"t_us\":38712100,\"phase\":\"slots.update.begin\",\"data\":{\"active_slots\":[{\"slot_id\":3,\"state\":\"GENERATING\",\"task_id\":0,\"prompt_tokens\":60,\"n_decoded\":4,\"n_ctx\":128}]}}\r\n{\"seq\":62,\"t_us\":38712132,\"phase\":\"queue.post\",\"data\":{\"front\":false,\"task\":{\"id\":5,\"index\":-1,\"type\":\"NEXT_RESPONSE\",\"id_target\":-1,\"id_slot\":-1,\"n_tokens\":0,\"stream\":true,\"n_predict\":-1,\"cache_prompt\":true,\"oaicompat\":0},\"queue_size_before\":0,\"deferred_size\":0}}\r\n{\"seq\":63,\"t_us\":38712194,\"phase\":\"decode.begin\",\"data\":{\"batch_offset\":0,\"batch_tokens\":1,\"batch_total_tokens\":1,\"n_batch\":128}}\r\n{\"seq\":64,\"t_us\":38827972,\"phase\":\"decode.end\",\"data\":{\"batch_offset\":0,\"batch_tokens\":1,\"ret\":0}}\r\n{\"seq\":65,\"t_us\":38828052,\"phase\":\"sample.token\",\"data\":{\"slot_id\":3,\"task_id\":0,\"tok_idx\":0,\"token_id\":443}}\r\n{\"seq\":66,\"t_us\":38828088,\"phase\":\"token.processed\",\"data\":{\"slot_id\":3,\"task_id\":0,\"token_id\":443,\"text_to_send\":\"!\",\"generated_text\":\"\\\"Here!\",\"n_decoded\":5,\"has_next_token\":true,\"stop\":\"NONE\"}}\r\n{\"seq\":67,\"t_us\":38828110,\"phase\":\"loop.update_slots.end\",\"data\":{}}\r\n{\"seq\":68,\"t_us\":38828139,\"phase\":\"loop.process_task\",\"data\":{\"task\":{\"id\":5,\"index\":-1,\"type\":\"NEXT_RESPONSE\",\"id_target\":-1,\"id_slot\":-1,\"n_tokens\":0,\"stream\":true,\"n_predict\":-1,\"cache_prompt\":true,\"oaicompat\":0},\"queue_size_after_pop\":0,\"deferred_size\":0}}\r\n{\"seq\":69,\"t_us\":38828168,\"phase\":\"task.process.begin\",\"data\":{\"task\":{\"id\":5,\"index\":-1,\"type\":\"NEXT_RESPONSE\",\"id_target\":-1,\"id_slot\":-1,\"n_tokens\":0,\"stream\":true,\"n_predict\":-1,\"cache_prompt\":true,\"oaicompat\":0}}}\r\n{\"seq\":70,\"t_us\":38828187,\"phase\":\"loop.update_slots.begin\",\"data\":{}}\r\n{\"seq\":71,\"t_us\":38828207,\"phase\":\"slots.update.begin\",\"data\":{\"active_slots\":[{\"slot_id\":3,\"state\":\"GENERATING\",\"task_id\":0,\"prompt_tokens\":61,\"n_decoded\":5,\"n_ctx\":128}]}}\r\n{\"seq\":72,\"t_us\":38828235,\"phase\":\"queue.post\",\"data\":{\"front\":false,\"task\":{\"id\":6,\"index\":-1,\"type\":\"NEXT_RESPONSE\",\"id_target\":-1,\"id_slot\":-1,\"n_tokens\":0,\"stream\":true,\"n_predict\":-1,\"cache_prompt\":true,\"oaicompat\":0},\"queue_size_before\":0,\"deferred_size\":0}}\r\n{\"seq\":73,\"t_us\":38828292,\"phase\":\"decode.begin\",\"data\":{\"batch_offset\":0,\"batch_tokens\":1,\"batch_total_tokens\":1,\"n_batch\":128}}\r\n{\"seq\":74,\"t_us\":38881390,\"phase\":\"decode.end\",\"data\":{\"batch_offset\":0,\"batch_tokens\":1,\"ret\":0}}\r\n{\"seq\":75,\"t_us\":38881739,\"phase\":\"sample.token\",\"data\":{\"slot_id\":3,\"task_id\":0,\"tok_idx\":0,\"token_id\":436}}\r\n{\"seq\":76,\"t_us\":38881906,\"phase\":\"token.processed\",\"data\":{\"slot_id\":3,\"task_id\":0,\"token_id\":436,\"text_to_send\":\"\\\"\",\"generated_text\":\"\\\"Here!\\\"\",\"n_decoded\":6,\"has_next_token\":true,\"stop\":\"NONE\"}}\r\n{\"seq\":77,\"t_us\":38881944,\"phase\":\"loop.update_slots.end\",\"data\":{}}\r\n{\"seq\":78,\"t_us\":38881975,\"phase\":\"loop.process_task\",\"data\":{\"task\":{\"id\":6,\"index\":-1,\"type\":\"NEXT_RESPONSE\",\"id_target\":-1,\"id_slot\":-1,\"n_tokens\":0,\"stream\":true,\"n_predict\":-1,\"cache_prompt\":true,\"oaicompat\":0},\"queue_size_after_pop\":0,\"deferred_size\":0}}\r\n{\"seq\":79,\"t_us\":38882003,\"phase\":\"task.process.begin\",\"data\":{\"task\":{\"id\":6,\"index\":-1,\"type\":\"NEXT_RESPONSE\",\"id_target\":-1,\"id_slot\":-1,\"n_tokens\":0,\"stream\":true,\"n_predict\":-1,\"cache_prompt\":true,\"oaicompat\":0}}}\r\n{\"seq\":80,\"t_us\":38882055,\"phase\":\"loop.update_slots.begin\",\"data\":{}}\r\n{\"seq\":81,\"t_us\":38882129,\"phase\":\"slots.update.begin\",\"data\":{\"active_slots\":[{\"slot_id\":3,\"state\":\"GENERATING\",\"task_id\":0,\"prompt_tokens\":62,\"n_decoded\":6,\"n_ctx\":128}]}}\r\n{\"seq\":82,\"t_us\":38893857,\"phase\":\"queue.post\",\"data\":{\"front\":false,\"task\":{\"id\":7,\"index\":-1,\"type\":\"NEXT_RESPONSE\",\"id_target\":-1,\"id_slot\":-1,\"n_tokens\":0,\"stream\":true,\"n_predict\":-1,\"cache_prompt\":true,\"oaicompat\":0},\"queue_size_before\":0,\"deferred_size\":0}}\r\n{\"seq\":83,\"t_us\":38894138,\"phase\":\"decode.begin\",\"data\":{\"batch_offset\":0,\"batch_tokens\":1,\"batch_total_tokens\":1,\"n_batch\":128}}\r\n{\"seq\":84,\"t_us\":39048520,\"phase\":\"decode.end\",\"data\":{\"batch_offset\":0,\"batch_tokens\":1,\"ret\":0}}\r\n{\"seq\":85,\"t_us\":39048601,\"phase\":\"sample.token\",\"data\":{\"slot_id\":3,\"task_id\":0,\"tok_idx\":0,\"token_id\":410}}\r\n{\"seq\":86,\"t_us\":39048642,\"phase\":\"token.processed\",\"data\":{\"slot_id\":3,\"task_id\":0,\"token_id\":410,\"text_to_send\":\" \",\"generated_text\":\"\\\"Here!\\\" \",\"n_decoded\":7,\"has_next_token\":true,\"stop\":\"NONE\"}}\r\n{\"seq\":87,\"t_us\":39048666,\"phase\":\"loop.update_slots.end\",\"data\":{}}\r\n{\"seq\":88,\"t_us\":39048697,\"phase\":\"loop.process_task\",\"data\":{\"task\":{\"id\":7,\"index\":-1,\"type\":\"NEXT_RESPONSE\",\"id_target\":-1,\"id_slot\":-1,\"n_tokens\":0,\"stream\":true,\"n_predict\":-1,\"cache_prompt\":true,\"oaicompat\":0},\"queue_size_after_pop\":0,\"deferred_size\":0}}\r\n{\"seq\":89,\"t_us\":39048727,\"phase\":\"task.process.begin\",\"data\":{\"task\":{\"id\":7,\"index\":-1,\"type\":\"NEXT_RESPONSE\",\"id_target\":-1,\"id_slot\":-1,\"n_tokens\":0,\"stream\":true,\"n_predict\":-1,\"cache_prompt\":true,\"oaicompat\":0}}}\r\n{\"seq\":90,\"t_us\":39048745,\"phase\":\"loop.update_slots.begin\",\"data\":{}}\r\n{\"seq\":91,\"t_us\":39048766,\"phase\":\"slots.update.begin\",\"data\":{\"active_slots\":[{\"slot_id\":3,\"state\":\"GENERATING\",\"task_id\":0,\"prompt_tokens\":63,\"n_decoded\":7,\"n_ctx\":128}]}}\r\n{\"seq\":92,\"t_us\":39048796,\"phase\":\"queue.post\",\"data\":{\"front\":false,\"task\":{\"id\":8,\"index\":-1,\"type\":\"NEXT_RESPONSE\",\"id_target\":-1,\"id_slot\":-1,\"n_tokens\":0,\"stream\":true,\"n_predict\":-1,\"cache_prompt\":true,\"oaicompat\":0},\"queue_size_before\":0,\"deferred_size\":0}}\r\n{\"seq\":93,\"t_us\":39048979,\"phase\":\"decode.begin\",\"data\":{\"batch_offset\":0,\"batch_tokens\":1,\"batch_total_tokens\":1,\"n_batch\":128}}\r\n{\"seq\":94,\"t_us\":39182403,\"phase\":\"decode.end\",\"data\":{\"batch_offset\":0,\"batch_tokens\":1,\"ret\":0}}\r\n{\"seq\":95,\"t_us\":39182484,\"phase\":\"sample.token\",\"data\":{\"slot_id\":3,\"task_id\":0,\"tok_idx\":0,\"token_id\":447}}\r\n{\"seq\":96,\"t_us\":39182518,\"phase\":\"token.processed\",\"data\":{\"slot_id\":3,\"task_id\":0,\"token_id\":447,\"text_to_send\":\"A\",\"generated_text\":\"\\\"Here!\\\" A\",\"n_decoded\":8,\"has_next_token\":false,\"stop\":\"LIMIT\"}}\r\n{\"seq\":97,\"t_us\":39182627,\"phase\":\"response.final\",\"data\":{\"task_id\":0,\"slot_id\":3,\"content\":\"\\\"Here!\\\" A\",\"n_decoded\":8,\"n_prompt_tokens\":57,\"n_tokens_cached\":64,\"truncated\":false,\"stop\":\"LIMIT\"}}\r\n{\"seq\":98,\"t_us\":39182655,\"phase\":\"results.send\",\"data\":{\"id\":0,\"is_stop\":true,\"is_error\":false,\"queue_size_before\":0}}\r\n{\"seq\":99,\"t_us\":39182688,\"phase\":\"loop.update_slots.end\",\"data\":{}}\r\n{\"seq\":100,\"t_us\":39182704,\"phase\":\"results.recv\",\"data\":{\"id\":0,\"is_stop\":true,\"is_error\":false,\"queue_size_after\":0}}\r\n{\"seq\":101,\"t_us\":39182749,\"phase\":\"loop.process_task\",\"data\":{\"task\":{\"id\":8,\"index\":-1,\"type\":\"NEXT_RESPONSE\",\"id_target\":-1,\"id_slot\":-1,\"n_tokens\":0,\"stream\":true,\"n_predict\":-1,\"cache_prompt\":true,\"oaicompat\":0},\"queue_size_after_pop\":0,\"deferred_size\":0}}\r\n{\"seq\":102,\"t_us\":39182837,\"phase\":\"task.process.begin\",\"data\":{\"task\":{\"id\":8,\"index\":-1,\"type\":\"NEXT_RESPONSE\",\"id_target\":-1,\"id_slot\":-1,\"n_tokens\":0,\"stream\":true,\"n_predict\":-1,\"cache_prompt\":true,\"oaicompat\":0}}}\r\n{\"seq\":103,\"t_us\":39182863,\"phase\":\"loop.update_slots.begin\",\"data\":{}}\r\n{\"seq\":104,\"t_us\":39182878,\"phase\":\"slots.update.begin\",\"data\":{\"active_slots\":[]}}\r\n{\"seq\":105,\"t_us\":39182892,\"phase\":\"slots.update.idle\",\"data\":{}}\r\n{\"seq\":106,\"t_us\":39182903,\"phase\":\"loop.update_slots.end\",\"data\":{}}\r\n";
+    const NODES = [{"id":"main","group":"startup","kind":"critical","title":"main()","subtitle":"启动 server 生命周期","source":"tools/server/server.cpp:4671","events":[1],"solves":"把命令行参数、模型、HTTP 服务、后台推理循环组装起来。","input":["命令行参数 argc=18","模型路径 models/stories260K.gguf","host=127.0.0.1, port=18080"],"output":["server_context ctx_server","HTTP routes","queue_tasks.start_loop()"],"real":{"argc":18,"model":"models/stories260K.gguf","host":"127.0.0.1","port":18080,"n_parallel_arg":1},"details":"main() 是进程级入口。它不是每个请求都会跑，而是 server 启动时跑一次。请求进来以后，真正重复执行的是 HTTP handler、queue、slot 和 update_slots 这条链。","children":["parse-args","load-model","register-routes","start-loop-boot"]},{"id":"parse-args","group":"startup","kind":"helper","title":"解析启动参数","subtitle":"params","source":"server.cpp main 参数解析附近","events":[1],"solves":"把命令行选项转成 server 参数。","input":["argv"],"output":["params.model","params.n_parallel","params.n_ctx"],"real":{"argc":18,"model":"C:\\Users\\JinyangZhai\\llama-trace-work\\models\\stories260K.gguf","host":"127.0.0.1","port":18080,"n_parallel":1},"details":"trace 记录了 n_parallel=1，但这个版本后续会把 n_parallel=1 自动调整为 4 个 slot，并启用 unified KV。"},{"id":"load-model","group":"startup","kind":"helper","title":"加载模型和上下文","subtitle":"model/context","source":"server.cpp main 初始化模型附近","events":[],"solves":"把 GGUF 模型加载到 llama.cpp runtime。","input":["GGUF 文件"],"output":["llama_model","llama_context"],"real":{"model_file":"models/stories260K.gguf"},"details":"这部分本次 trace 没额外打印内部对象，但从 server 能成功响应可知模型和 context 已初始化。"},{"id":"register-routes","group":"startup","kind":"helper","title":"注册 HTTP 路由","subtitle":"/v1/chat/completions","source":"tools/server/server.cpp:5905-5907","events":[],"solves":"把 URL 路由绑定到对应 handler。","input":["HTTP server 实例","api_prefix"],"output":["POST /v1/chat/completions -> handle_chat_completions"],"real":{"route":"/v1/chat/completions","handler":"handle_chat_completions"},"details":"这一步解释为什么客户端 POST /v1/chat/completions 会进入 handle_chat_completions()。"},{"id":"start-loop-boot","group":"startup","kind":"critical","title":"queue_tasks.start_loop()","subtitle":"后台主循环开始等 task","source":"tools/server/server.cpp:6030","events":[2,3,4,5],"solves":"启动一个长期运行的循环，不断从 queue_tasks 取工作，并在空闲时调用 update_slots。","input":["queue_tasks","on_new_task callback","on_update_slots callback"],"output":["持续推进 task 和 slot"],"real":{"initial_active_slots":[],"initial_idle":true},"details":"server 启动后，即使没有请求，主循环也会轮询 update_slots。本次 trace 的 #2-#5 就是请求前的一次空转。"},{"id":"handle-chat","group":"http","kind":"critical","title":"handle_chat_completions()","subtitle":"接住 chat 请求","source":"tools/server/server.cpp:5473","events":[6,7,8],"solves":"把 OpenAI 兼容的 chat 请求从 HTTP 世界接进 server 内部。","input":["HTTP body JSON","ctx_server","response writer"],"output":["chat params data","调用 handle_completions_impl()"],"real":{"path":"/v1/chat/completions","body":{"temperature":0,"messages":[{"content":"Say hello in one short sentence.","role":"user"}],"stream":false,"model":"tiny-stories","max_tokens":8}},"details":"这是 /v1/chat/completions 的入口。它的重点不是推理，而是把 chat 格式整理成后续 completion 共用逻辑能处理的形状。","children":["read-body","chat-template","call-completion-impl"]},{"id":"read-body","group":"http","kind":"helper","title":"读取请求 JSON","subtitle":"req.body -> json","source":"handle_chat_completions 内部","events":[6],"solves":"拿到客户端提交的 OpenAI 风格参数。","input":["req.body"],"output":["json body"],"real":{"temperature":0,"messages":[{"content":"Say hello in one short sentence.","role":"user"}],"stream":false,"model":"tiny-stories","max_tokens":8},"details":"本次请求只有一条 user message，temperature=0，max_tokens=8，stream=false。"},{"id":"chat-template","group":"http","kind":"critical","title":"oaicompat_chat_params_parse()","subtitle":"messages -> prompt","source":"tools/server/server.cpp:5482","events":[7],"solves":"把 messages 数组变成模型实际读取的 prompt。","input":["messages: [{ role: user, content: ... }]","model chat template"],"output":["prompt 字符串","completion 参数"],"real":{"prompt":"\u003c|im_start|>user\nSay hello in one short sentence.\u003c|im_end|>\n\u003c|im_start|>assistant\n","stream":false,"prompt_chars":82},"details":"模型不是直接读 messages JSON。chat template 会加上模型需要的特殊标记，例如 \u003c|im_start|>user 和 \u003c|im_start|>assistant。"},{"id":"call-completion-impl","group":"http","kind":"helper","title":"转入 completion 共用入口","subtitle":"chat 变 completion","source":"tools/server/server.cpp:5492","events":[8],"solves":"chat、completion、infill 最终复用同一套投递和推理逻辑。","input":["prompt + OpenAI 兼容参数"],"output":["handle_completions_impl(data, oaicompat=true)"],"real":{"type":"COMPLETION","oaicompat":1,"stream":false,"has_prompt":true},"details":"从这里开始，chat 请求和普通 completion 请求在后端处理上基本合流。"},{"id":"completion-impl","group":"task","kind":"critical","title":"handle_completions_impl()","subtitle":"prompt -> server_task","source":"tools/server/server.cpp:5222","events":[8,9,10,11,12,13],"solves":"把整理好的 prompt 变成 llama.cpp server 内部可调度的工作单。","input":["prompt 字符串","采样参数","n_predict/max_tokens","stream 标志"],"output":["server_task id=0","queue_results 等待关系","queue_tasks 中的 task"],"real":{"tokenized":{"n_inputs":1,"input_token_counts":[57],"n_ctx_slot":128},"task":{"id":0,"index":0,"type":"COMPLETION","id_target":-1,"id_slot":-1,"n_tokens":57,"stream":false,"n_predict":8,"cache_prompt":true,"oaicompat":1},"completion_id":"chatcmpl-ryue1wYGFlFZI8qwwNkbTMMlWDCbIIcm"},"details":"这是请求从 HTTP 层进入调度层的关键函数。它做 tokenize、创建 task、登记等待结果、投递 task。","children":["tokenize","create-task","wait-add","queue-post"]},{"id":"tokenize","group":"task","kind":"critical","title":"tokenize prompt","subtitle":"prompt -> token ids","source":"handle_completions_impl 内部","events":[9],"solves":"把文本 prompt 转成模型能计算的 token id 序列。","input":["prompt 字符串"],"output":["57 个 prompt token"],"real":{"n_inputs":1,"input_token_counts":[57],"n_ctx_slot":128},"details":"trace 记录了 token 数量，没有打印每个 prompt token id。这里要记住：后面的 n_tokens=57 来自这一步。"},{"id":"create-task","group":"task","kind":"critical","title":"创建 server_task","subtitle":"内部工作单","source":"handle_completions_impl 内部","events":[10],"solves":"把 prompt tokens 和生成参数封装成可排队的 task。","input":["prompt tokens","n_predict=8","oaicompat=1"],"output":["server_task{id=0,type=COMPLETION,n_tokens=57}"],"real":{"id":0,"index":0,"type":"COMPLETION","id_target":-1,"id_slot":-1,"n_tokens":57,"stream":false,"n_predict":8,"cache_prompt":true,"oaicompat":1},"details":"server_task 是后续 queue、slot、result 都认的核心 id。HTTP 请求本身不会直接进 update_slots，task 会。"},{"id":"wait-add","group":"task","kind":"helper","title":"queue_results.add_waiting_tasks()","subtitle":"登记等待","source":"tools/server/server.cpp:5298","events":[11],"solves":"告诉结果队列：HTTP 线程正在等 task 0。","input":["task_id=0"],"output":["waiting set 增加 id=0"],"real":{"task":{"id":0,"index":0,"type":"COMPLETION","id_target":-1,"id_slot":-1,"n_tokens":57,"stream":false,"n_predict":8,"cache_prompt":true,"oaicompat":1},"waiting_size_before":0},"details":"没有这个等待关系，后台算完也不知道哪个 HTTP 请求要拿这个结果。"},{"id":"queue-post","group":"task","kind":"critical","title":"queue_tasks.post()","subtitle":"投递 task","source":"handle_completions_impl 内部","events":[12,13],"solves":"把 task 交给后台主循环。","input":["server_task id=0"],"output":["queue_tasks 里出现 task 0"],"real":{"post":{"front":false,"task":{"id":0,"index":0,"type":"COMPLETION","id_target":-1,"id_slot":-1,"n_tokens":57,"stream":false,"n_predict":8,"cache_prompt":true,"oaicompat":1},"queue_size_before":0,"deferred_size":0},"posted":{"task_ids":[0],"completion_id":"chatcmpl-ryue1wYGFlFZI8qwwNkbTMMlWDCbIIcm"}},"details":"这一步是 HTTP 线程和推理主循环的交接点。queue_size_before=0，说明当时队列是空的。"},{"id":"start-loop","group":"schedule","kind":"critical","title":"start_loop()","subtitle":"主循环取 task","source":"tools/server/server.cpp:2236","events":[14,28,38,48,58,68,78,88,101],"solves":"后台循环从 queue_tasks 取出工作，并决定是处理 task 还是推进 slot。","input":["queue_tasks"],"output":["调用 process_single_task(task)","触发 update_slots()"],"real":{"task":{"id":0,"index":0,"type":"COMPLETION","id_target":-1,"id_slot":-1,"n_tokens":57,"stream":false,"n_predict":8,"cache_prompt":true,"oaicompat":1},"queue_size_after_pop":0,"deferred_size":0},"details":"你可以把 start_loop() 看成 server 的事件循环。它不是模型计算本身，而是把 task 和 update_slots 串起来。","children":["process-task","next-response"]},{"id":"process-task","group":"schedule","kind":"critical","title":"process_single_task()","subtitle":"给 task 找 slot","source":"tools/server/server.cpp:3512","events":[15,16,17,18],"solves":"根据 task 类型处理请求；对 COMPLETION task，选择可用 slot 并启动。","input":["server_task id=0"],"output":["slot 3 承接 task 0","slot state=STARTED"],"real":{"lookup":{"task":{"id":0,"index":0,"type":"COMPLETION","id_target":-1,"id_slot":-1,"n_tokens":57,"stream":false,"n_predict":8,"cache_prompt":true,"oaicompat":1},"requested_slot":-1,"selected_slot":3,"selected_slot_processing":false},"launch":{"slot_id":3,"slot_state":"STARTED","task_id":0,"task_tokens":57,"n_ctx":128}},"details":"slot 是请求运行时状态容器。task 被放进 slot 后，update_slots 才能看到它并推进推理。","children":["slot-lookup","slot-launch"]},{"id":"slot-lookup","group":"schedule","kind":"helper","title":"slot lookup","subtitle":"选择工位","source":"process_single_task 内部","events":[16],"solves":"找一个可用 slot 承接 task。","input":["requested_slot=-1","空闲 slot 列表"],"output":["selected_slot=3"],"real":{"task":{"id":0,"index":0,"type":"COMPLETION","id_target":-1,"id_slot":-1,"n_tokens":57,"stream":false,"n_predict":8,"cache_prompt":true,"oaicompat":1},"requested_slot":-1,"selected_slot":3,"selected_slot_processing":false},"details":"requested_slot=-1 表示用户没有指定 slot，server 自动选择。本次选中 slot 3。"},{"id":"slot-launch","group":"schedule","kind":"helper","title":"launch slot","subtitle":"slot IDLE -> STARTED","source":"process_single_task 内部","events":[17,18],"solves":"把 task 的 prompt 和参数挂到 slot 上。","input":["slot 3","task 0"],"output":["slot_state=STARTED","task_tokens=57"],"real":{"slot_id":3,"slot_state":"STARTED","task_id":0,"task_tokens":57,"n_ctx":128},"details":"这一步之后，slot 3 变成活跃 slot。下一次 update_slots 会扫描到它。"},{"id":"next-response","group":"schedule","kind":"helper","title":"NEXT_RESPONSE","subtitle":"内部续跑 tick","source":"start_loop/update_slots 调度逻辑","events":[21,32,42,52,62,72,82,92],"solves":"让主循环继续推进下一轮生成。","input":["slot 仍在生成"],"output":["新的内部 task，type=NEXT_RESPONSE"],"real":[{"event":21,"task_id":1,"meaning":"内部续跑 tick，不是新的 HTTP 请求"},{"event":32,"task_id":2,"meaning":"内部续跑 tick，不是新的 HTTP 请求"},{"event":42,"task_id":3,"meaning":"内部续跑 tick，不是新的 HTTP 请求"},{"event":52,"task_id":4,"meaning":"内部续跑 tick，不是新的 HTTP 请求"},{"event":62,"task_id":5,"meaning":"内部续跑 tick，不是新的 HTTP 请求"},{"event":72,"task_id":6,"meaning":"内部续跑 tick，不是新的 HTTP 请求"},{"event":82,"task_id":7,"meaning":"内部续跑 tick，不是新的 HTTP 请求"},{"event":92,"task_id":8,"meaning":"内部续跑 tick，不是新的 HTTP 请求"}],"details":"这些 task 不是客户端请求。它们像内部时钟，让 start_loop 一轮轮回到 update_slots。"},{"id":"update-slots","group":"infer","kind":"critical","title":"update_slots()","subtitle":"推进所有活跃 slot","source":"tools/server/server.cpp:3739","events":[19,20,22,23,24,25,26,27],"solves":"扫描活跃 slot，构造 batch，调用模型，采样 token，必要时发送结果。","input":["active_slots","slot.prompt_tokens","slot.generated_text","n_batch/n_ctx"],"output":["llama_decode 调用","sampled token","partial/final result"],"real":{"first_active":{"active_slots":[{"slot_id":3,"state":"STARTED","task_id":0,"prompt_tokens":0,"n_decoded":0,"n_ctx":128}]},"first_decode":{"batch_offset":0,"batch_tokens":57,"batch_total_tokens":57,"n_batch":128},"first_token":{"index":1,"decode_event":22,"sample_event":25,"processed_event":26,"batch_tokens":57,"token_id":436,"text_to_send":"\"","generated_text":"\"","n_decoded":1,"stop":"NONE","has_next_token":true}},"details":"update_slots() 内部很大，但主线只有一句：它是“把 slot 往前推进一步”的发动机。prompt 阶段一次吃 57 个 token；生成阶段每轮采样 1 个 token。","children":["build-batch","llama-decode","sampler","process-token"]},{"id":"build-batch","group":"infer","kind":"critical","title":"构造 llama_batch","subtitle":"slot -> batch","source":"update_slots 内部","events":[22,33,43,53,63,73,83,93],"solves":"把当前要计算的 token 收集成一次 llama_decode 的输入。","input":["prompt token 或上一轮生成 token"],"output":["llama_batch"],"real":[{"index":1,"begin_event":22,"end_event":23,"batch_tokens":57,"ret":0,"purpose":"prefill prompt 上下文"},{"index":2,"begin_event":33,"end_event":34,"batch_tokens":1,"ret":0,"purpose":"接回上一个 token，准备采样下一个 token"},{"index":3,"begin_event":43,"end_event":44,"batch_tokens":1,"ret":0,"purpose":"接回上一个 token，准备采样下一个 token"},{"index":4,"begin_event":53,"end_event":54,"batch_tokens":1,"ret":0,"purpose":"接回上一个 token，准备采样下一个 token"},{"index":5,"begin_event":63,"end_event":64,"batch_tokens":1,"ret":0,"purpose":"接回上一个 token，准备采样下一个 token"},{"index":6,"begin_event":73,"end_event":74,"batch_tokens":1,"ret":0,"purpose":"接回上一个 token，准备采样下一个 token"},{"index":7,"begin_event":83,"end_event":84,"batch_tokens":1,"ret":0,"purpose":"接回上一个 token，准备采样下一个 token"},{"index":8,"begin_event":93,"end_event":94,"batch_tokens":1,"ret":0,"purpose":"接回上一个 token，准备采样下一个 token"}],"details":"第一次 batch_tokens=57，叫 prompt prefill；后面 batch_tokens=1，是把上一个 token 接回上下文。"},{"id":"llama-decode","group":"infer","kind":"critical","title":"llama_decode(ctx, batch)","subtitle":"模型前向计算","source":"tools/server/server.cpp:4368","events":[22,23,33,34,43,44,53,54,63,64,73,74,83,84,93,94],"solves":"让模型根据 batch 计算下一步需要的 logits，并更新 KV cache。","input":["llama_context ctx","llama_batch batch"],"output":["logits","更新后的 KV cache","ret=0 成功"],"real":{"first_decode_begin":{"batch_offset":0,"batch_tokens":57,"batch_total_tokens":57,"n_batch":128},"first_decode_end":{"batch_offset":0,"batch_tokens":57,"ret":0},"decode_calls":8},"details":"llama_decode 不直接返回文本。它算出 logits，后面 sampler 才会从 logits 中选 token。trace 没打印 logits 数组，因为它非常大。"},{"id":"sampler","group":"infer","kind":"critical","title":"common_sampler_sample()","subtitle":"logits -> token_id","source":"tools/server/server.cpp:4470","events":[25,35,45,55,65,75,85,95],"solves":"根据 logits 和采样参数选择下一个 token id。","input":["logits","temperature=0","sampler state"],"output":["token_id"],"real":[{"slot_id":3,"task_id":0,"tok_idx":56,"token_id":436},{"slot_id":3,"task_id":0,"tok_idx":0,"token_id":440},{"slot_id":3,"task_id":0,"tok_idx":0,"token_id":411},{"slot_id":3,"task_id":0,"tok_idx":0,"token_id":276},{"slot_id":3,"task_id":0,"tok_idx":0,"token_id":443},{"slot_id":3,"task_id":0,"tok_idx":0,"token_id":436},{"slot_id":3,"task_id":0,"tok_idx":0,"token_id":410},{"slot_id":3,"task_id":0,"tok_idx":0,"token_id":447}],"details":"temperature=0 时更接近选择分数最高的 token。本次 token_id 序列是 436, 440, 411, 276, 443, 436, 410, 447。"},{"id":"process-token","group":"infer","kind":"critical","title":"process_token()","subtitle":"token_id -> 文本并检查停止","source":"tools/server/server.cpp:3007","events":[26,36,46,56,66,76,86,96],"solves":"把 token id 转成 text_to_send，追加到 generated_text，并判断是否继续。","input":["sampled token_id","slot 状态","停止条件"],"output":["generated_text","has_next_token","stop"],"real":[{"index":1,"decode_event":22,"sample_event":25,"processed_event":26,"batch_tokens":57,"token_id":436,"text_to_send":"\"","generated_text":"\"","n_decoded":1,"stop":"NONE","has_next_token":true},{"index":2,"decode_event":33,"sample_event":35,"processed_event":36,"batch_tokens":1,"token_id":440,"text_to_send":"H","generated_text":"\"H","n_decoded":2,"stop":"NONE","has_next_token":true},{"index":3,"decode_event":43,"sample_event":45,"processed_event":46,"batch_tokens":1,"token_id":411,"text_to_send":"e","generated_text":"\"He","n_decoded":3,"stop":"NONE","has_next_token":true},{"index":4,"decode_event":53,"sample_event":55,"processed_event":56,"batch_tokens":1,"token_id":276,"text_to_send":"re","generated_text":"\"Here","n_decoded":4,"stop":"NONE","has_next_token":true},{"index":5,"decode_event":63,"sample_event":65,"processed_event":66,"batch_tokens":1,"token_id":443,"text_to_send":"!","generated_text":"\"Here!","n_decoded":5,"stop":"NONE","has_next_token":true},{"index":6,"decode_event":73,"sample_event":75,"processed_event":76,"batch_tokens":1,"token_id":436,"text_to_send":"\"","generated_text":"\"Here!\"","n_decoded":6,"stop":"NONE","has_next_token":true},{"index":7,"decode_event":83,"sample_event":85,"processed_event":86,"batch_tokens":1,"token_id":410,"text_to_send":" ","generated_text":"\"Here!\" ","n_decoded":7,"stop":"NONE","has_next_token":true},{"index":8,"decode_event":93,"sample_event":95,"processed_event":96,"batch_tokens":1,"token_id":447,"text_to_send":"A","generated_text":"\"Here!\" A","n_decoded":8,"stop":"LIMIT","has_next_token":false}],"details":"这一步能最直观看到文本怎么长出来：\" -> H -> e -> re -> ! -> \" -> 空格 -> A。第 8 个 token 后 stop=LIMIT。"},{"id":"final-response","group":"response","kind":"critical","title":"send_final_response()","subtitle":"slot -> result","source":"tools/server/server.cpp:3272","events":[97,98],"solves":"把 slot 里的最终生成文本封装成 server_task_result。","input":["slot.generated_text","usage/timings","stop reason"],"output":["server_task_result id=0"],"real":{"task_id":0,"slot_id":3,"content":"\"Here!\" A","n_decoded":8,"n_prompt_tokens":57,"n_tokens_cached":64,"truncated":false,"stop":"LIMIT"},"details":"final response 仍然是 server 内部结果对象，还不是最终 HTTP JSON。它会先进入 queue_results。","children":["result-send","result-recv","oai-json"]},{"id":"result-send","group":"response","kind":"helper","title":"queue_results.send()","subtitle":"后台送结果","source":"tools/server/server.cpp:2445","events":[98],"solves":"把 result 放进结果队列。","input":["server_task_result id=0"],"output":["queue_results 中出现 id=0"],"real":{"id":0,"is_stop":true,"is_error":false,"queue_size_before":0},"details":"send 发生在推理主循环一侧。"},{"id":"result-recv","group":"response","kind":"helper","title":"queue_results.recv()","subtitle":"HTTP 线程取结果","source":"tools/server/server.cpp:5312 receive_multi_results","events":[100],"solves":"等待中的 HTTP handler 取回 task 0 的结果。","input":["waiting task_id=0"],"output":["server_task_result"],"real":{"id":0,"is_stop":true,"is_error":false,"queue_size_after":0},"details":"recv 发生在 HTTP handler 一侧。至此后台和 HTTP 线程完成回合。"},{"id":"oai-json","group":"response","kind":"critical","title":"OpenAI JSON response","subtitle":"result -> HTTP body","source":"handle_completions_impl 响应处理","events":[100],"solves":"把 server 内部 result 转成 OpenAI 兼容响应。","input":["server_task_result","completion_id","timings"],"output":["HTTP JSON"],"real":{"choices":[{"finish_reason":"length","index":0,"message":{"role":"assistant","content":"\"Here!\" A"}}],"created":1778477511,"model":"tiny-stories","system_fingerprint":"b1-1f5accb","object":"chat.completion","usage":{"completion_tokens":8,"prompt_tokens":57,"total_tokens":65},"id":"chatcmpl-ryue1wYGFlFZI8qwwNkbTMMlWDCbIIcm","timings":{"cache_n":0,"prompt_n":57,"prompt_ms":93.186,"prompt_per_token_ms":1.634842105263158,"prompt_per_second":611.6798660743029,"predicted_n":8,"predicted_ms":797.441,"predicted_per_token_ms":99.680125,"predicted_per_second":10.032090148362073}},"details":"客户端最终看到的是 choices/message/content 和 usage。这里 content 是 \"\\\"Here!\\\" A\"，finish_reason 是 length。"}];
+    const GROUPS = [{"id":"startup","title":"A. 进程启动层","subtitle":"main() 只在 server 启动时跑一次","nodes":["main"]},{"id":"http","title":"B. HTTP 接入层","subtitle":"把 /v1/chat/completions 变成 prompt","nodes":["handle-chat"]},{"id":"task","title":"C. 任务构造层","subtitle":"把 prompt 变成可调度的 server_task","nodes":["completion-impl"]},{"id":"schedule","title":"D. 调度层","subtitle":"队列、主循环、slot 交接","nodes":["start-loop","process-task"]},{"id":"infer","title":"E. 推理推进层","subtitle":"update_slots + llama_decode + sampler","nodes":["update-slots"]},{"id":"response","title":"F. 返回层","subtitle":"result 回到 HTTP 线程","nodes":["final-response"]}];
+    const FLOW_EDGES = [["main","handle-chat","server 启动好并注册路由"],["handle-chat","chat-template","HTTP JSON -> prompt"],["chat-template","completion-impl","prompt 交给共用 completion 入口"],["completion-impl","queue-post","生成 task 并投递"],["queue-post","start-loop","主循环取 task"],["start-loop","process-task","调度 task"],["process-task","update-slots","slot 变活跃"],["update-slots","llama-decode","构造 batch 并前向计算"],["llama-decode","sampler","logits 交给采样器"],["sampler","process-token","token_id 转文本"],["process-token","final-response","stop=LIMIT"],["final-response","oai-json","HTTP 返回 JSON"]];
+    const TALK_TRACK = [{"time":"0-3 min","title":"总览","content":"server 是两条线协作：HTTP 线程负责接请求和返回 JSON，后台主循环负责调度 slot 和模型推理。"},{"time":"3-7 min","title":"请求变 task","content":"重点讲 handle_chat_completions、chat template、tokenize、server_task。真实数据：prompt 82 字符，token 数 57，task_id=0。"},{"time":"7-11 min","title":"task 变 slot 推理","content":"重点讲 queue_tasks、start_loop、process_single_task、slot 3。slot 是运行时状态容器。"},{"time":"11-15 min","title":"decode 和 token 生成","content":"重点讲 update_slots、llama_decode、sampler、process_token。第一次 batch=57，后续 batch=1，最终 8 个 token 后 stop=LIMIT。"}];
+    const DECK_SLIDES = [
+      {
+        kicker: '01 / 全局视角',
+        title: '一条 chat 请求，怎样穿过 server.cpp？',
+        lead: '先抓住整条主链路，再钻进函数。演示模式只回答一个问题：这条请求到底如何被接住、加工、推理，再返回。',
+        takeaway: '主线先看数据怎么变形，再看函数怎么协作。',
+        terms: ['/v1/chat/completions', 'chat template', 'server_task', 'slot', 'llama_decode()']
+      },
+      {
+        kicker: '02 / 先分两条线',
+        title: 'main() 搭舞台；真正处理请求的是另一条运行线。',
+        lead: '初学者最容易把启动逻辑和单次请求逻辑搅在一起。拆开看，复杂度立刻降一半。',
+        takeaway: 'main() 只在启动时跑一次，不是每个请求都参与推理。',
+        terms: ['main()', 'route', 'queue_tasks', 'handle_chat_completions()']
+      },
+      {
+        kicker: '03 / 第一次关键变形',
+        title: 'HTTP chat JSON 不会直接喂给模型。',
+        lead: 'OpenAI 风格的 messages 先过 chat template，变成模型真正看到的 prompt 文本。',
+        takeaway: 'JSON 是接口协议；prompt 才是模型输入。',
+        terms: ['/v1/chat/completions', 'OAI compatibility', 'chat template', 'prompt']
+      },
+      {
+        kicker: '04 / 请求变工单',
+        title: 'prompt 先 tokenize，再封装成 server_task。',
+        lead: '从这里开始，请求不再只是文本，而是一个可以排队、调度、追踪的内部工作单。',
+        takeaway: 'HTTP 请求进入 server 内部的关键门槛，是 server_task。',
+        terms: ['tokenize', 'server_task', 'n_predict', 'queue_tasks']
+      },
+      {
+        kicker: '05 / 交给后台调度',
+        title: 'task 被投进队列，主循环再把它放进 slot。',
+        lead: '这一步解释了为什么 HTTP handler 不直接“跑模型”，而是把工作交给后台运行时。',
+        takeaway: 'slot 是一次生成任务的运行时工位。',
+        terms: ['queue_tasks', 'start_loop()', 'process_single_task()', 'slot']
+      },
+      {
+        kicker: '06 / 真正进入推理',
+        title: 'update_slots() 推进 slot，llama_decode() 负责前向计算。',
+        lead: '先读完整个 prompt，再一轮一轮生成 token。decode 不直接吐文字，而是产出 logits 给采样器。',
+        takeaway: '57 tokens 是 prefill；后面 7 次都是单 token 续跑。',
+        terms: ['update_slots()', 'llama_batch', 'llama_decode()', 'logits', 'sampler']
+      },
+      {
+        kicker: '07 / update_slots 的 8 轮节拍',
+        title: '一次真实请求里，update_slots() 实际推进了 8 轮。',
+        lead: '第 1 轮吃完整个 prompt；第 2 到第 8 轮，每轮只推进一个新 token，并让 generated_text 再长一点。',
+        takeaway: 'update_slots() 不是一次做完，而是一轮轮把 slot 往前推。',
+        terms: ['update_slots()', 'slot', 'batch', 'process_token()', 'stop=LIMIT']
+      },
+      {
+        kicker: '08 / 输出如何长出来',
+        title: '回答不是一下子出现的，而是 token 一步一步累积。',
+        lead: '这页只看真实生成过程。你会看到 generated_text 如何从空串逐步变成最终输出。',
+        takeaway: '模型先选 token_id，再 detokenize 成文本片段。',
+        terms: ['sampling', 'process_token()', 'detokenize', 'stop=LIMIT']
+      },
+      {
+        kicker: '09 / 回到 HTTP',
+        title: 'slot 里的结果，还要再回到等待中的请求线程。',
+        lead: '推理主循环不直接回客户端。它先产出 server_task_result，再交给 queue_results，被 handler 取走。',
+        takeaway: '后台推理线程和 HTTP 线程，通过结果队列完成最后握手。',
+        terms: ['send_final_response()', 'queue_results', 'HTTP handler', 'OAI compatibility']
+      },
+      {
+        kicker: '10 / 最后复盘',
+        title: '把整条链路压缩成 7 个动作。',
+        lead: '讲到这里，再回看全图，server.cpp 的主流程就不再是一团代码，而是一条清晰的数据流水线。',
+        takeaway: '看懂 server.cpp，先抓住这 7 步。',
+        terms: ['main()', 'chat template', 'server_task', 'slot', 'llama_decode()', 'queue_results']
+      }
+    ];
+    const TOKEN_ROWS = [{"index":1,"decode_event":22,"sample_event":25,"processed_event":26,"batch_tokens":57,"token_id":436,"text_to_send":"\"","generated_text":"\"","n_decoded":1,"stop":"NONE","has_next_token":true},{"index":2,"decode_event":33,"sample_event":35,"processed_event":36,"batch_tokens":1,"token_id":440,"text_to_send":"H","generated_text":"\"H","n_decoded":2,"stop":"NONE","has_next_token":true},{"index":3,"decode_event":43,"sample_event":45,"processed_event":46,"batch_tokens":1,"token_id":411,"text_to_send":"e","generated_text":"\"He","n_decoded":3,"stop":"NONE","has_next_token":true},{"index":4,"decode_event":53,"sample_event":55,"processed_event":56,"batch_tokens":1,"token_id":276,"text_to_send":"re","generated_text":"\"Here","n_decoded":4,"stop":"NONE","has_next_token":true},{"index":5,"decode_event":63,"sample_event":65,"processed_event":66,"batch_tokens":1,"token_id":443,"text_to_send":"!","generated_text":"\"Here!","n_decoded":5,"stop":"NONE","has_next_token":true},{"index":6,"decode_event":73,"sample_event":75,"processed_event":76,"batch_tokens":1,"token_id":436,"text_to_send":"\"","generated_text":"\"Here!\"","n_decoded":6,"stop":"NONE","has_next_token":true},{"index":7,"decode_event":83,"sample_event":85,"processed_event":86,"batch_tokens":1,"token_id":410,"text_to_send":" ","generated_text":"\"Here!\" ","n_decoded":7,"stop":"NONE","has_next_token":true},{"index":8,"decode_event":93,"sample_event":95,"processed_event":96,"batch_tokens":1,"token_id":447,"text_to_send":"A","generated_text":"\"Here!\" A","n_decoded":8,"stop":"LIMIT","has_next_token":false}];
+    const BATCH_ROWS = [{"index":1,"begin_event":22,"end_event":23,"batch_tokens":57,"ret":0,"purpose":"prefill prompt 上下文"},{"index":2,"begin_event":33,"end_event":34,"batch_tokens":1,"ret":0,"purpose":"接回上一个 token，准备采样下一个 token"},{"index":3,"begin_event":43,"end_event":44,"batch_tokens":1,"ret":0,"purpose":"接回上一个 token，准备采样下一个 token"},{"index":4,"begin_event":53,"end_event":54,"batch_tokens":1,"ret":0,"purpose":"接回上一个 token，准备采样下一个 token"},{"index":5,"begin_event":63,"end_event":64,"batch_tokens":1,"ret":0,"purpose":"接回上一个 token，准备采样下一个 token"},{"index":6,"begin_event":73,"end_event":74,"batch_tokens":1,"ret":0,"purpose":"接回上一个 token，准备采样下一个 token"},{"index":7,"begin_event":83,"end_event":84,"batch_tokens":1,"ret":0,"purpose":"接回上一个 token，准备采样下一个 token"},{"index":8,"begin_event":93,"end_event":94,"batch_tokens":1,"ret":0,"purpose":"接回上一个 token，准备采样下一个 token"}];
+    const SLOT_ROWS = [{"event":20,"slot_id":3,"state":"STARTED","task_id":0,"prompt_tokens":0,"n_decoded":0,"n_ctx":128},{"event":31,"slot_id":3,"state":"GENERATING","task_id":0,"prompt_tokens":57,"n_decoded":1,"n_ctx":128},{"event":41,"slot_id":3,"state":"GENERATING","task_id":0,"prompt_tokens":58,"n_decoded":2,"n_ctx":128},{"event":51,"slot_id":3,"state":"GENERATING","task_id":0,"prompt_tokens":59,"n_decoded":3,"n_ctx":128},{"event":61,"slot_id":3,"state":"GENERATING","task_id":0,"prompt_tokens":60,"n_decoded":4,"n_ctx":128},{"event":71,"slot_id":3,"state":"GENERATING","task_id":0,"prompt_tokens":61,"n_decoded":5,"n_ctx":128},{"event":81,"slot_id":3,"state":"GENERATING","task_id":0,"prompt_tokens":62,"n_decoded":6,"n_ctx":128},{"event":91,"slot_id":3,"state":"GENERATING","task_id":0,"prompt_tokens":63,"n_decoded":7,"n_ctx":128}];
+    const NEXT_ROWS = [{"event":21,"task_id":1,"meaning":"内部续跑 tick，不是新的 HTTP 请求"},{"event":32,"task_id":2,"meaning":"内部续跑 tick，不是新的 HTTP 请求"},{"event":42,"task_id":3,"meaning":"内部续跑 tick，不是新的 HTTP 请求"},{"event":52,"task_id":4,"meaning":"内部续跑 tick，不是新的 HTTP 请求"},{"event":62,"task_id":5,"meaning":"内部续跑 tick，不是新的 HTTP 请求"},{"event":72,"task_id":6,"meaning":"内部续跑 tick，不是新的 HTTP 请求"},{"event":82,"task_id":7,"meaning":"内部续跑 tick，不是新的 HTTP 请求"},{"event":92,"task_id":8,"meaning":"内部续跑 tick，不是新的 HTTP 请求"}];
+    const UPDATE_ROUNDS = [
+      {"round":1,"start_event":20,"slot_state":"STARTED","prompt_tokens_before":0,"n_decoded_before":0,"batch_tokens":57,"token_id":436,"text_to_send":"\"","generated_text":"\"","stop":"NONE","prompt_done":true,"seqs":[20,22,23,24,25,26]},
+      {"round":2,"start_event":31,"slot_state":"GENERATING","prompt_tokens_before":57,"n_decoded_before":1,"batch_tokens":1,"token_id":440,"text_to_send":"H","generated_text":"\"H","stop":"NONE","prompt_done":false,"seqs":[31,33,34,35,36]},
+      {"round":3,"start_event":41,"slot_state":"GENERATING","prompt_tokens_before":58,"n_decoded_before":2,"batch_tokens":1,"token_id":411,"text_to_send":"e","generated_text":"\"He","stop":"NONE","prompt_done":false,"seqs":[41,43,44,45,46]},
+      {"round":4,"start_event":51,"slot_state":"GENERATING","prompt_tokens_before":59,"n_decoded_before":3,"batch_tokens":1,"token_id":276,"text_to_send":"re","generated_text":"\"Here","stop":"NONE","prompt_done":false,"seqs":[51,53,54,55,56]},
+      {"round":5,"start_event":61,"slot_state":"GENERATING","prompt_tokens_before":60,"n_decoded_before":4,"batch_tokens":1,"token_id":443,"text_to_send":"!","generated_text":"\"Here!","stop":"NONE","prompt_done":false,"seqs":[61,63,64,65,66]},
+      {"round":6,"start_event":71,"slot_state":"GENERATING","prompt_tokens_before":61,"n_decoded_before":5,"batch_tokens":1,"token_id":436,"text_to_send":"\"","generated_text":"\"Here!\"","stop":"NONE","prompt_done":false,"seqs":[71,73,74,75,76]},
+      {"round":7,"start_event":81,"slot_state":"GENERATING","prompt_tokens_before":62,"n_decoded_before":6,"batch_tokens":1,"token_id":410,"text_to_send":" ","generated_text":"\"Here!\" ","stop":"NONE","prompt_done":false,"seqs":[81,83,84,85,86]},
+      {"round":8,"start_event":91,"slot_state":"GENERATING","prompt_tokens_before":63,"n_decoded_before":7,"batch_tokens":1,"token_id":447,"text_to_send":"A","generated_text":"\"Here!\" A","stop":"LIMIT","prompt_done":false,"seqs":[91,93,94,95,96,97]}
+    ];
+    const GLOSSARY = {"main()":{"analogy":"像 server 进程的总控台，先把电源、窗口、工位和传送带都打开。","professional":"C++ 程序入口。负责解析参数、加载模型、创建 server_context 和 httplib::Server、注册路由，最后进入 queue_tasks.start_loop()。","source":"tools/server/server.cpp:4671","related":["server_context","httplib::Server","route","queue_tasks"]},"server_context":{"analogy":"像后厨总调度台，所有工位、队列、模型上下文都在这里登记。","professional":"server.cpp 中的核心运行时对象，持有 slots、queue_tasks、queue_results、模型 context、参数和统计信息，HTTP handler 与主循环都围绕它协作。","source":"server_context 结构体及相关方法","related":["slot","queue_tasks","queue_results","ctx / llama_context"]},"httplib::Server":{"analogy":"像 HTTP 前台接待窗口，负责听端口和把客人分到对应窗口。","professional":"cpp-httplib 提供的 HTTP server 对象。server.cpp 用它注册 POST /v1/chat/completions 等 route，并把请求转交给 handler。","source":"tools/server/server.cpp:5905-5907","related":["route","handler","/v1/chat/completions"]},"middleware":{"analogy":"像进门前的安检或盖章流程，请求进真正窗口前先过一遍。","professional":"围绕 HTTP 请求的通用前后处理逻辑，比如 CORS、鉴权、日志、错误包装等。它不是推理核心，但会影响请求能否进入 handler。","source":"HTTP server 注册与请求处理周边","related":["handler","route","httplib::Server"]},"handler":{"analogy":"像某个窗口的办事员，某个路由来了就由它处理。","professional":"绑定到 route 的回调函数。比如 handle_chat_completions() 接收 /v1/chat/completions 请求，解析 JSON，并转入后端任务流程。","source":"tools/server/server.cpp:5473","related":["HTTP handler","route","handle_chat_completions()"]},"HTTP handler":{"analogy":"像前台办事员，只负责接单、整理单据、等待后厨结果。","professional":"处理 HTTP 请求的 route callback。它不直接跑模型，而是创建 server_task、投递 queue_tasks，再从 queue_results 等结果。","source":"tools/server/server.cpp:5473","related":["handler","server_task","queue_results"]},"route":{"analogy":"像门牌号，告诉请求该去哪个窗口。","professional":"HTTP method + path 到 handler 的映射。这里 POST /v1/chat/completions 被映射到 handle_chat_completions()。","source":"tools/server/server.cpp:5906","related":["httplib::Server","handler","/v1/chat/completions"]},"server_state":{"analogy":"像工位上的状态灯，告诉你现在空闲、刚开始还是正在生成。","professional":"server 运行时状态枚举/字段，用来描述 slot 或任务处理阶段，例如 IDLE、STARTED、GENERATING 等。trace 里能看到 slot_state 和 active slot state。","source":"slot 状态与 trace events","related":["slot","process_single_task()","update_slots()"]},"server_task":{"analogy":"像一张后厨工单，写着要做什么、做多少、交给谁。","professional":"server 内部工作单，包含 task id、type、prompt token 数、n_predict、stream、oaicompat 等。HTTP 请求会先被包装成 server_task 再进入队列。","source":"tools/server/server.cpp:5222, trace #10","related":["queue_tasks","process_single_task()","server_context"]},"queue_tasks":{"analogy":"像待办工单传送带，前台把工单放上去，后厨主循环来拿。","professional":"HTTP 线程向后台主循环投递 server_task 的队列。start_loop() 从这里取 task，再调用 process_single_task() 或推进 update_slots()。","source":"tools/server/server.cpp:5299, 2236","related":["server_task","start_loop()","deferred task"]},"queue_results":{"analogy":"像出餐台，后厨把做好的结果放上去，前台按号码取走。","professional":"后台推理线程把 server_task_result 交回 HTTP 线程的结果队列。HTTP handler 先登记等待 task id，最终 recv 对应结果。","source":"tools/server/server.cpp:5298, 5312","related":["server_task","send_final_response()","HTTP handler"]},"deferred task":{"analogy":"像暂存工单，当前工位不够或条件不满足时先放一边。","professional":"queue 调度里的延后任务。server 可把暂时不能处理的 task 放入 deferred 队列，等 slot 或条件可用后再 pop 出来处理。","source":"queue_tasks deferred 逻辑","related":["queue_tasks","slot","process_single_task()"]},"slot":{"analogy":"像一个推理工位，一个请求上桌后就在这个工位一步步加工。","professional":"server_slot 保存一次请求的运行时状态，包括 task、prompt 进度、generated_text、采样器、上下文窗口和 KV cache 使用情况。","source":"tools/server/server.cpp:3512, trace #16-#20","related":["server_state","update_slots()","KV cache"]},"batch":{"analogy":"像一次端给模型的一盘 token，可能是一整段 prompt，也可能只有一个新 token。","professional":"llama_batch 是 llama_decode() 的输入批次。本次第一次 batch_tokens=57 做 prompt prefill，后续 batch_tokens=1 推进生成。","source":"tools/server/server.cpp:4368, trace #22/#33","related":["llama_batch","llama_decode()","token"]},"llama_batch":{"analogy":"像一次端给模型的一盘 token，可能是一整段 prompt，也可能只有一个新 token。","professional":"llama.cpp 的批处理输入结构，包含要计算的 token、位置和序列信息。server 在 update_slots() 中构造它，再传给 llama_decode()。","source":"tools/server/server.cpp:4368","related":["batch","update_slots()","llama_decode()"]},"ctx / llama_context":{"analogy":"像模型运行现场，里面有当前上下文、缓存和计算状态。","professional":"llama_context 是 llama.cpp 的推理上下文，承载运行时计算状态、KV cache 和 logits 输出。llama_decode(ctx, batch) 基于它推进模型前向计算。","source":"llama.cpp runtime context","related":["model / llama_model","KV cache","llama_decode()"]},"model / llama_model":{"analogy":"像只读的发动机和说明书，真正的参数权重都在这里。","professional":"llama_model 保存加载后的模型权重和模型元信息。多个 context 可围绕模型创建，推理时 context 引用 model 做计算。","source":"模型加载初始化阶段","related":["ctx / llama_context","vocab","LoRA"]},"vocab":{"analogy":"像模型的字典，告诉模型编号 436 代表哪个文本片段。","professional":"词表记录 token id 与 token piece 的映射，并服务于 tokenize/detokenize。不同模型的 vocab 和特殊 token 规则可能不同。","source":"llama_vocab / tokenizer","related":["tokenize","detokenize","token"]},"KV cache":{"analogy":"像已经算过的上下文笔记，后面生成不用从头重算。","professional":"Transformer attention 的 key/value 缓存。prompt prefill 后，后续每生成一个 token 只需追加计算并复用历史 KV。","source":"llama_context runtime state","related":["ctx / llama_context","prompt cache","llama_decode()"]},"llama_decode()":{"analogy":"像让模型发动机转一圈，输入 token，产出下一步采样需要的分数。","professional":"llama.cpp 的前向计算入口。输入 llama_context 和 llama_batch，更新 KV cache，并产生 logits；它不直接返回文字。","source":"tools/server/server.cpp:4368","related":["llama_batch","logits","sampling"]},"sampling":{"analogy":"像从候选词列表里挑下一个词，temperature=0 时更像选最高分。","professional":"采样根据 logits 和参数如 temperature、top_p、grammar 等选择 token id。server 中 common_sampler_sample() 完成这一步。","source":"tools/server/server.cpp:4470","related":["sampler","logits","process_token()"]},"sampler":{"analogy":"像挑选器，从模型给的一堆分数里选一个 token。","professional":"采样器维护采样状态和参数，根据 logits 选择下一个 token id。本次 trace 采到 436, 440, 411 等 token。","source":"tools/server/server.cpp:4470","related":["sampling","logits","token"]},"logits":{"analogy":"像候选 token 的打分表，分高的不一定必选，但更有机会。","professional":"模型前向计算输出的未归一化分数，sampler 基于 logits 选择下一个 token。本页 trace 没打印完整 logits 数组，因为它很大。","source":"llama_decode() 输出","related":["llama_decode()","sampling","sampler"]},"prompt cache":{"analogy":"像常用开场白的预处理缓存，相同前缀不用每次重算。","professional":"缓存 prompt token 或对应 KV 状态，以减少重复 prompt prefill 成本。server_task 里的 cache_prompt 表示允许复用 prompt 缓存。","source":"server_task.cache_prompt / KV cache 逻辑","related":["KV cache","prompt","server_task"]},"stream / SSE":{"analogy":"像边做边上菜，生成一点就推一点给客户端。","professional":"stream=true 时使用 Server-Sent Events 分块返回 token/partial result。本次请求 stream=false，所以客户端只收到最终 JSON。","source":"handle_completions_impl stream branch","related":["HTTP handler","queue_results","/v1/chat/completions"]},"/v1/chat/completions":{"analogy":"像 OpenAI 兼容的聊天点单窗口。","professional":"server 注册的 OpenAI-compatible chat endpoint。POST 到该路径会进入 handle_chat_completions()。","source":"tools/server/server.cpp:5906","related":["OAI compatibility","handler","chat template"]},"OAI compatibility":{"analogy":"像 OpenAI 口音翻译器，让 llama.cpp server 说同一种 API 方言。","professional":"OpenAI-compatible 请求和响应适配层，把 messages/max_tokens/stream 等字段转换为 server 内部参数，并输出 choices/usage 等格式。","source":"oaicompat_* parsing/response 逻辑","related":["/v1/chat/completions","chat template","server_task"]},"chat template":{"analogy":"像把聊天记录排版成模型熟悉的剧本格式。","professional":"把 role/content messages 展开成 prompt 字符串，加入模型所需特殊标记，如 \u003c|im_start|>user 和 assistant 起始标记。","source":"tools/server/server.cpp:5482, trace #7","related":["prompt","tokenize","OAI compatibility"]},"prompt":{"analogy":"像真正递给模型看的题面，不是原始 JSON 表单。","professional":"模型输入文本。对 chat API 来说，prompt 是 messages 经 chat template 展开后的字符串，再被 tokenizer 转成 token。","source":"trace #7","related":["chat template","tokenize","server_task"]},"token":{"analogy":"像模型读写的积木块，可能是一个字母、词片段或特殊标记。","professional":"token 是模型计算的离散整数单位。文本先 tokenize 成 token id，生成时先得到 token id，再 detokenize 成文本。","source":"tokenizer / sampler trace","related":["vocab","tokenize","detokenize"]},"tokenize":{"analogy":"像把句子切成模型字典里的编号。","professional":"把 prompt 字符串转换为 std::vector\u003cllama_token>。本次 prompt 被切成 57 个 token。","source":"trace #9","related":["prompt","vocab","server_task"]},"detokenize":{"analogy":"像把模型吐出的编号翻译回人能读的文字。","professional":"把 token id 转回文本片段。process_token() 会把 sampled token 转成 text_to_send 并追加到 generated_text。","source":"tools/server/server.cpp:3007","related":["token","process_token()","vocab"]},"embedding":{"analogy":"像把文本压成坐标，方便做相似度比较。","professional":"embedding 模式输出向量表示而不是生成文本。它用于检索、聚类、语义匹配等场景，不是本次 chat completion 主链路。","source":"server embedding endpoints / llama embedding API","related":["ctx / llama_context","rerank","metrics"]},"rerank":{"analogy":"像把搜索候选结果重新排个队。","professional":"rerank 根据 query 与候选文档的相关性打分并重排。它通常走专门模型或接口，不在本次 chat completion 生成链路中。","source":"rerank endpoint/model path","related":["embedding","model / llama_model"]},"LoRA":{"analogy":"像给模型装一个可拆卸的小补丁，不重做整台发动机。","professional":"Low-Rank Adaptation 适配器，可在不修改完整模型权重的情况下改变模型行为。server 可在加载阶段应用 LoRA。","source":"model loading / adapter config","related":["model / llama_model","main()"]},"multimodal / mmproj":{"analogy":"像图片到语言模型之间的转接头。","professional":"多模态 projector 把图像等模态的特征映射到语言模型可接收的 embedding/token 空间。普通文本 chat completion 不会走这条分支。","source":"multimodal/mmproj loading path","related":["model / llama_model","embedding"]},"speculative decoding":{"analogy":"像小助手先草拟，大模型验收，验过就一次前进多步。","professional":"使用 draft model 先生成候选 token，再由 target model 验证，以提升吞吐。server.cpp 中有 speculative decode 分支，但本次 trace 未启用。","source":"update_slots speculative 分支","related":["llama_decode()","sampling","batch"]},"metrics":{"analogy":"像仪表盘，记录跑了多久、每秒多少 token、调用了几次 decode。","professional":"server 暴露性能和运行统计，例如 prompt_ms、predicted_per_second、decode 调用次数等，用于观测和调优。","source":"metrics endpoint / response timings","related":["llama_decode()","stream / SSE"]},"process_single_task()":{"analogy":"像工单分派员，决定这张工单去哪一个工位。","professional":"从主循环拿到 server_task 后，根据类型处理。对 COMPLETION task，它选择 slot 并把 task 挂到 slot 上。","source":"tools/server/server.cpp:3512","related":["server_task","slot","queue_tasks"]},"update_slots()":{"analogy":"像车间节拍器，每一拍推进所有活跃工位一点点。","professional":"扫描 active slots，构造 batch，调用 llama_decode()，采样 token，处理停止条件并发送结果。内部很大，但主线就是推进 slot。","source":"tools/server/server.cpp:3739","related":["slot","llama_decode()","process_token()"]},"process_token()":{"analogy":"像把模型选出的编号贴到回答纸上，并检查要不要停笔。","professional":"把 sampled token detokenize 成 text_to_send，追加到 generated_text，同时判断 EOS、stop word、max_tokens 等停止条件。","source":"tools/server/server.cpp:3007","related":["detokenize","sampling","stop=LIMIT"]},"handle_chat_completions()":{"analogy":"像聊天接口的专属前台，负责把聊天点单转成后厨能处理的格式。","professional":"POST /v1/chat/completions 的 handler。它调用 oaicompat_chat_params_parse() 生成 prompt，再转入 handle_completions_impl()。","source":"tools/server/server.cpp:5473","related":["/v1/chat/completions","chat template","handler"]},"start_loop()":{"analogy":"像后厨流水线的班长，一直看传送带上有没有新工单。","professional":"queue_tasks 的主循环，从 task 队列取任务，调用 process_single_task()，并通过 update_slots() 推进活跃 slots。","source":"tools/server/server.cpp:2236","related":["queue_tasks","process_single_task()","update_slots()"]},"send_final_response()":{"analogy":"像把完成的菜装盘并贴上订单号。","professional":"把 slot 中的最终 generated_text、usage 和 stop reason 包装成 server_task_result，随后通过 queue_results.send() 返回等待中的 HTTP handler。","source":"tools/server/server.cpp:3272","related":["queue_results","server_task","stop=LIMIT"]},"stop=LIMIT":{"analogy":"像写到规定字数就停，不是因为自然结束。","professional":"生成停止原因是达到了 max_tokens/n_predict 限制。本次 completion_tokens=8，所以第 8 个 token 后停止。","source":"trace #96-#97","related":["process_token()","n_predict","metrics"]},"n_predict":{"analogy":"像最多允许写几个 token 的上限。","professional":"server 内部生成上限参数，OpenAI 请求中的 max_tokens 会映射到类似限制。本次 n_predict=8。","source":"server_task.params / trace #10","related":["server_task","stop=LIMIT"]}};
+    const DESCRIPTIONS = {"trace.open":"trace 文件打开，后续事件开始写入 JSONL。","main.args_parsed":"main() 完成参数解析。","http.chat.request":"HTTP handler 收到 /v1/chat/completions 请求体。","http.chat.parsed":"messages 通过 chat template 变成 prompt。","http.completions_impl.begin":"进入 completion/chat/infill 共用入口。","http.prompt.tokenized":"prompt 被 tokenizer 转成 token。","http.task.created":"创建 server_task。","results.wait_add":"HTTP 线程登记等待 task id 的结果。","queue.post":"task 被放入 queue_tasks。NEXT_RESPONSE 是内部续跑 tick。","http.tasks.posted":"HTTP handler 投递 task 完成。","loop.process_task":"主循环从 queue_tasks 取出 task。","task.process.begin":"server_context 开始处理 task。","task.slot_lookup":"为 task 选择可用 slot。","slot.launch.begin":"slot 准备承接 task。","slot.launch.end":"slot 已进入 STARTED 状态。","loop.update_slots.begin":"主循环准备调用 update_slots()。","slots.update.begin":"update_slots() 扫描活跃 slots。","slots.update.idle":"所有 slots 空闲，本轮无需推理。","decode.begin":"即将调用 llama_decode(ctx, batch)。","decode.end":"llama_decode 返回，ret=0 代表成功。","slot.prompt_done":"prompt 已处理完，slot 进入生成阶段。","sample.token":"sampler 从 logits 里选出下一个 token id。","token.processed":"token 转成文本并追加到 generated_text，同时检查停止条件。","response.final":"最终 completion result 已构造好。","results.send":"后台把结果放进 queue_results。","results.recv":"HTTP 线程取到结果，准备返回 JSON。"};
+    const NODE_BY_ID = Object.fromEntries(NODES.map(n => [n.id, n]));
+    let selectedNodeId = 'main';
+    let selectedSeq = TRACE_EVENTS.find(e => e.phase === 'http.chat.request')?.seq ?? 0;
+    let currentSlideIndex = 0;
+    const byId = id => document.getElementById(id);
+    const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+    const pretty = value => JSON.stringify(value, null, 2);
+    const compactPreview = value => {
+      const text = typeof value === 'string' ? value : JSON.stringify(value ?? {});
+      return text.length > 180 ? text.slice(0, 177) + '...' : text;
+    };
+    const startUs = TRACE_EVENTS[0]?.t_us ?? 0;
+    const ms = ev => ((ev.t_us - startUs) / 1000).toFixed(3) + ' ms';
+
+    function eventLabel(seq) {
+      const ev = TRACE_EVENTS.find(e => e.seq === seq);
+      return ev ? '#' + ev.seq + ' ' + ev.phase : '#' + seq;
+    }
+
+    function slideTermsMarkup(terms) {
+      return terms.map(term => '<button class="slide-term" data-term="' + escapeHtml(term) + '">' + escapeHtml(term) + '</button>').join('');
+    }
+
+    function renderDeckVisual(index) {
+      if (index === 0) {
+        return '<div style="width:100%; display:grid; gap:14px; align-content:center;">'
+          + '<div class="hero-chain">'
+          + ['HTTP JSON', 'chat template', 'prompt tokens', 'server_task', 'slot', 'llama_decode', 'HTTP JSON'].map((label, i) => '<article class="chain-card"><strong>' + escapeHtml(label) + '</strong><small>' + escapeHtml(['入口协议', '模板展开', '57 个 prompt token', 'task 0', 'slot 3', 'decode + sampling', '最终返回'][i]) + '</small></article>').join('')
+          + '</div>'
+          + '<div class="deck-metrics">'
+          + '<article class="deck-metric"><span>请求入口</span><b>/v1/chat/completions</b></article>'
+          + '<article class="deck-metric"><span>prompt token</span><b>57</b></article>'
+          + '<article class="deck-metric"><span>completion token</span><b>8</b></article>'
+          + '<article class="deck-metric"><span>最终内容</span><b>&quot;Here!&quot; A</b></article>'
+          + '</div>'
+          + '</div>';
+      }
+      if (index === 1) {
+        return '<div class="dual-lanes">'
+          + '<article class="lane-band"><strong>启动时只跑一次</strong><div class="lane-row">'
+          + ['main()', '加载模型', '注册 route', 'start_loop()'].map(label => '<div class="lane-card primary">' + escapeHtml(label) + '</div>').join('')
+          + '</div></article>'
+          + '<article class="lane-band"><strong>每个请求都会走一遍</strong><div class="lane-row">'
+          + ['handler', 'server_task', 'slot + decode', 'queue_results'].map(label => '<div class="lane-card">' + escapeHtml(label) + '</div>').join('')
+          + '</div></article>'
+          + '</div>';
+      }
+      if (index === 2) {
+        const reqPreview = pretty({
+          messages: REQUEST_JSON.messages,
+          max_tokens: REQUEST_JSON.max_tokens,
+          temperature: REQUEST_JSON.temperature
+        });
+        return '<div class="transform-grid">'
+          + '<article class="mini-code"><b>HTTP 请求片段</b><pre>' + escapeHtml(reqPreview) + '</pre></article>'
+          + '<div class="transform-arrow">→</div>'
+          + '<article class="mini-code"><b>chat template 后的 prompt</b><pre>' + escapeHtml(PROMPT_TEXT) + '</pre></article>'
+          + '</div>';
+      }
+      if (index === 3) {
+        return '<div class="task-formation">'
+          + '<article class="task-card"><h3>prompt 先被 tokenize</h3><div class="token-badge">57</div><div class="token-cloud">'
+          + ['prompt', 'special tokens', 'assistant prefix', 'token ids'].map(label => '<span class="token-chip">' + escapeHtml(label) + '</span>').join('')
+          + '</div></article>'
+          + '<div class="transform-arrow">→</div>'
+          + '<article class="task-card"><h3>再装进 server_task</h3><ul>'
+          + '<li><code>id = 0</code></li>'
+          + '<li><code>type = COMPLETION</code></li>'
+          + '<li><code>n_tokens = 57</code></li>'
+          + '<li><code>n_predict = 8</code></li>'
+          + '</ul></article>'
+          + '</div>';
+      }
+      if (index === 4) {
+        return '<div class="schedule-grid">'
+          + '<article class="schedule-step"><b>HTTP handler</b><em>接住请求，创建 task</em></article>'
+          + '<article class="schedule-step"><b>queue_tasks</b><em>把 task 投给后台</em></article>'
+          + '<article class="schedule-step"><b>start_loop()</b><em>取 task 并调度</em></article>'
+          + '<article class="schedule-step"><b>slot 3</b><em>承接 task 0，进入 STARTED</em></article>'
+          + '</div>';
+      }
+      if (index === 5) {
+        return '<div class="pipeline-grid">'
+          + ['slot 3', 'llama_batch', 'llama_decode()', 'logits', 'sampler'].map((label, i) => '<article class="pipeline-card"><strong>' + escapeHtml(label) + '</strong><small>' + escapeHtml(['活跃运行态', '组织要算的 token', '模型前向计算', '候选 token 分数', '选出 token_id'][i]) + '</small></article>').join('')
+          + '<div class="batch-strip">'
+          + BATCH_ROWS.map(row => '<span class="batch-pill">' + escapeHtml(row.batch_tokens === 57 ? '57 / prefill' : '1') + '</span>').join('')
+          + '</div>'
+          + '</div>';
+      }
+      if (index === 6) {
+        return '<div class="round-grid">'
+          + UPDATE_ROUNDS.map(round => '<article class="round-card' + (round.round === UPDATE_ROUNDS.length ? ' final' : '') + '">'
+            + '<span>Round ' + round.round + '</span>'
+            + '<strong>' + escapeHtml(round.batch_tokens === 57 ? 'prefill 57' : 'decode 1') + '</strong>'
+            + '<code>token ' + escapeHtml(round.token_id) + '</code>'
+            + '<small>' + escapeHtml(round.generated_text) + '</small>'
+            + '<small>' + escapeHtml(round.stop === 'LIMIT' ? '停止: LIMIT' : '继续生成') + '</small>'
+          + '</article>').join('')
+          + '</div>';
+      }
+      if (index === 7) {
+        return '<div class="token-growth">'
+          + TOKEN_ROWS.map((row, idx) => '<article class="token-step' + (idx === TOKEN_ROWS.length - 1 ? ' final' : '') + '"><code>' + escapeHtml(String(row.token_id)) + '</code><strong>' + escapeHtml(row.generated_text || ' ') + '</strong><small>' + escapeHtml('本轮新增: ' + JSON.stringify(row.text_to_send) + ' / ' + row.stop) + '</small></article>').join('')
+          + '</div>';
+      }
+      if (index === 8) {
+        const responsePreview = pretty({
+          content: RESPONSE_JSON.choices?.[0]?.message?.content,
+          prompt_tokens: RESPONSE_JSON.usage?.prompt_tokens,
+          completion_tokens: RESPONSE_JSON.usage?.completion_tokens,
+          finish_reason: RESPONSE_JSON.choices?.[0]?.finish_reason
+        });
+        return '<div class="result-grid">'
+          + '<article class="result-card"><h3>后台结果</h3><ul>'
+          + '<li><code>send_final_response()</code></li>'
+          + '<li><code>server_task_result</code></li>'
+          + '<li><code>queue_results.send()</code></li>'
+          + '</ul></article>'
+          + '<div class="result-arrow">→</div>'
+          + '<article class="mini-code"><b>最终 HTTP JSON 摘要</b><pre>' + escapeHtml(responsePreview) + '</pre></article>'
+          + '</div>';
+      }
+      return '<div class="recap-chain">'
+        + [
+          ['01', 'main()', '搭舞台'],
+          ['02', 'handler', '接请求'],
+          ['03', 'chat template', '造 prompt'],
+          ['04', 'server_task', '造工单'],
+          ['05', 'slot', '承接运行态'],
+          ['06', 'decode', '生成 token'],
+          ['07', 'queue_results', '回 HTTP']
+        ].map(([no, title, desc]) => '<article class="recap-card"><small>' + escapeHtml(no) + '</small><strong>' + escapeHtml(title) + '</strong><small>' + escapeHtml(desc) + '</small></article>').join('')
+        + '</div>';
+    }
+
+    function renderDeck() {
+      const stage = byId('deckStage');
+      stage.innerHTML = DECK_SLIDES.map((slide, index) => '<article class="deck-slide" data-slide="' + index + '">'
+        + '<div class="slide-top">'
+        + '<div><span class="slide-kicker">' + escapeHtml(slide.kicker) + '</span><h2 class="slide-title">' + escapeHtml(slide.title) + '</h2><p class="slide-lead">' + escapeHtml(slide.lead) + '</p></div>'
+        + '<aside class="slide-takeaway">' + escapeHtml(slide.takeaway) + '</aside>'
+        + '</div>'
+        + '<div class="slide-visual">' + renderDeckVisual(index) + '</div>'
+        + '<div class="slide-terms">' + slideTermsMarkup(slide.terms) + '</div>'
+        + '</article>').join('');
+      byId('deckDots').innerHTML = DECK_SLIDES.map((slide, index) => '<button class="deck-dot" data-slide-dot="' + index + '" aria-label="第 ' + (index + 1) + ' 页"></button>').join('');
+      byId('deckDots').querySelectorAll('[data-slide-dot]').forEach(btn => btn.addEventListener('click', () => setSlide(Number(btn.dataset.slideDot))));
+      setSlide(currentSlideIndex);
+    }
+
+    function setSlide(index) {
+      currentSlideIndex = Math.max(0, Math.min(DECK_SLIDES.length - 1, index));
+      document.querySelectorAll('.deck-slide').forEach((slide, slideIndex) => slide.classList.toggle('active', slideIndex === currentSlideIndex));
+      document.querySelectorAll('.deck-dot').forEach((dot, dotIndex) => dot.classList.toggle('active', dotIndex === currentSlideIndex));
+      byId('deckCounter').textContent = String(currentSlideIndex + 1).padStart(2, '0') + ' / ' + String(DECK_SLIDES.length).padStart(2, '0');
+      byId('deckProgress').style.width = ((currentSlideIndex + 1) / DECK_SLIDES.length * 100).toFixed(2) + '%';
+      const slide = DECK_SLIDES[currentSlideIndex];
+      if (slide?.terms?.length && typeof window.selectGlossaryTerm === 'function') {
+        window.selectGlossaryTerm(slide.terms[0]);
+      }
+    }
+
+    function changeSlide(delta) {
+      setSlide(currentSlideIndex + delta);
+    }
+
+    function renderTalkTrack() {
+      byId('talkTrack').innerHTML = TALK_TRACK.map(item => '<article class="talk-card"><span class="time">' + escapeHtml(item.time) + '</span><h3>' + escapeHtml(item.title) + '</h3><p>' + escapeHtml(item.content) + '</p></article>').join('');
+    }
+
+    function renderNav() {
+      const nav = byId('nodeNav');
+      nav.innerHTML = NODES.filter(n => n.kind === 'critical').map(n => '<button class="nav-btn" data-node="' + escapeHtml(n.id) + '"><strong>' + escapeHtml(n.title) + '</strong><small>' + escapeHtml(n.subtitle) + '</small></button>').join('');
+      nav.querySelectorAll('[data-node]').forEach(btn => btn.addEventListener('click', () => selectNode(btn.dataset.node)));
+    }
+
+    function renderDiagram() {
+      const diagram = byId('diagram');
+      diagram.innerHTML = '';
+      for (const group of GROUPS) {
+        const lane = document.createElement('article');
+        lane.className = 'lane';
+        const header = document.createElement('div');
+        header.className = 'lane-header';
+        header.innerHTML = '<h3>' + escapeHtml(group.title) + '</h3><small>' + escapeHtml(group.subtitle) + '</small>';
+        lane.appendChild(header);
+        const stack = document.createElement('div');
+        stack.className = 'node-stack';
+        for (const nodeId of group.nodes) {
+          stack.appendChild(renderNodeButton(NODE_BY_ID[nodeId], false));
+          const children = NODE_BY_ID[nodeId].children || [];
+          if (children.length) {
+            const childWrap = document.createElement('div');
+            childWrap.className = 'children';
+            for (const childId of children) childWrap.appendChild(renderNodeButton(NODE_BY_ID[childId], true));
+            stack.appendChild(childWrap);
+          }
+        }
+        lane.appendChild(stack);
+        diagram.appendChild(lane);
+      }
+    }
+
+    function renderNodeButton(node, compact) {
+      const btn = document.createElement('button');
+      btn.className = compact ? 'child-chip' : 'node ' + node.kind;
+      btn.dataset.node = node.id;
+      if (compact) {
+        btn.innerHTML = '<strong>' + escapeHtml(node.title) + '</strong><small> ' + escapeHtml(node.subtitle) + '</small>';
+      } else {
+        btn.innerHTML = '<div class="title-line"><strong>' + escapeHtml(node.title) + '</strong><span class="tag ' + escapeHtml(node.kind) + '">' + (node.kind === 'critical' ? '关键' : '辅助') + '</span></div><p>' + escapeHtml(node.subtitle) + '</p>';
+      }
+      btn.addEventListener('click', () => selectNode(node.id));
+      return btn;
+    }
+
+    function selectNode(id) {
+      selectedNodeId = id;
+      const node = NODE_BY_ID[id] || NODE_BY_ID.main;
+      byId('nodeTitle').textContent = node.title;
+      byId('nodeSub').textContent = node.subtitle;
+      byId('nodeSolves').textContent = node.solves;
+      byId('nodeInputs').innerHTML = (node.input || []).map(v => '<li>' + escapeHtml(v) + '</li>').join('');
+      byId('nodeOutputs').innerHTML = (node.output || []).map(v => '<li>' + escapeHtml(v) + '</li>').join('');
+      byId('nodeSource').innerHTML = '源码位置：<code>' + escapeHtml(node.source) + '</code><br>' + escapeHtml(node.details || '');
+      const events = byId('nodeEvents');
+      events.innerHTML = '';
+      for (const seq of node.events || []) {
+        const ev = TRACE_EVENTS.find(e => e.seq === seq);
+        if (!ev) continue;
+        const btn = document.createElement('button');
+        btn.className = 'event-link';
+        btn.textContent = eventLabel(seq);
+        btn.addEventListener('click', () => selectEvent(seq));
+        events.appendChild(btn);
+      }
+      byId('nodeReal').textContent = pretty(node.real ?? {});
+      byId('focusTitle').textContent = node.title;
+      byId('focusSub').textContent = node.subtitle;
+      byId('focusSolves').textContent = node.solves;
+      byId('focusInputs').innerHTML = (node.input || []).slice(0, 2).map(v => '<li>' + escapeHtml(v) + '</li>').join('');
+      byId('focusOutputs').innerHTML = (node.output || []).slice(0, 2).map(v => '<li>' + escapeHtml(v) + '</li>').join('');
+      byId('focusEvidence').innerHTML = '<b>真实 trace 证据</b><span>' + escapeHtml(compactPreview(node.real ?? {})) + '</span>';
+      document.querySelectorAll('[data-node]').forEach(btn => btn.classList.toggle('active', btn.dataset.node === id));
+    }
+
+    function renderEdges() {
+      const path = [];
+      for (const edge of FLOW_EDGES) {
+        if (!path.length) path.push(edge[0]);
+        path.push(edge[1]);
+      }
+      byId('edgeList').innerHTML = path.map((nodeId, index) => {
+        const node = NODE_BY_ID[nodeId];
+        const edge = FLOW_EDGES[index];
+        const step = String(index + 1).padStart(2, '0');
+        const card = '<button class="flow-node" data-node="' + escapeHtml(node.id) + '"><span class="flow-index">' + step + '</span><span><strong>' + escapeHtml(node.title) + '</strong><small>' + escapeHtml(node.subtitle) + '</small></span><span class="flow-kind">' + escapeHtml(node.group) + '</span></button>';
+        const arrow = edge ? '<div class="flow-arrow"><span class="flow-arrow-icon">↓</span><span class="flow-arrow-text">' + escapeHtml(edge[2]) + '</span></div>' : '';
+        return '<div class="flow-step">' + card + arrow + '</div>';
+      }).join('');
+      byId('edgeList').querySelectorAll('[data-node]').forEach(btn => btn.addEventListener('click', () => selectNode(btn.dataset.node)));
+    }
+
+    function table(headers, rows, mapper) {
+      const thead = '<thead><tr>' + headers.map(h => '<th>' + escapeHtml(h) + '</th>').join('') + '</tr></thead>';
+      const tbody = '<tbody>' + rows.map(row => '<tr>' + mapper(row).map(cell => '<td>' + cell + '</td>').join('') + '</tr>').join('') + '</tbody>';
+      return thead + tbody;
+    }
+
+    function renderTables() {
+      const critical = NODES.filter(n => n.kind === 'critical');
+      byId('criticalTable').innerHTML = table(['函数/节点', '解决什么', '输入', '输出', '真实证据'], critical, n => [
+        '<button class="event-link" data-node="' + escapeHtml(n.id) + '">' + escapeHtml(n.title) + '</button><br><small>' + escapeHtml(n.source) + '</small>',
+        escapeHtml(n.solves),
+        '<ul>' + (n.input || []).map(v => '<li>' + escapeHtml(v) + '</li>').join('') + '</ul>',
+        '<ul>' + (n.output || []).map(v => '<li>' + escapeHtml(v) + '</li>').join('') + '</ul>',
+        (n.events || []).map(seq => '<button class="event-link" data-seq="' + seq + '">' + escapeHtml(eventLabel(seq)) + '</button>').join(' ')
+      ]);
+      byId('batchTable').innerHTML = table(['#', '事件', 'batch_tokens', 'ret', '用途'], BATCH_ROWS, r => [
+        String(r.index), '<button class="event-link" data-seq="' + r.begin_event + '">#' + r.begin_event + '</button>', '<code>' + escapeHtml(r.batch_tokens) + '</code>', '<code>' + escapeHtml(r.ret) + '</code>', escapeHtml(r.purpose)
+      ]);
+      byId('slotTable').innerHTML = table(['事件', 'slot', 'state', 'task', 'prompt_tokens', 'n_decoded', 'n_ctx'], SLOT_ROWS, r => [
+        '<button class="event-link" data-seq="' + r.event + '">#' + r.event + '</button>', '<code>' + escapeHtml(r.slot_id) + '</code>', '<code>' + escapeHtml(r.state) + '</code>', '<code>' + escapeHtml(r.task_id) + '</code>', '<code>' + escapeHtml(r.prompt_tokens) + '</code>', '<code>' + escapeHtml(r.n_decoded) + '</code>', '<code>' + escapeHtml(r.n_ctx) + '</code>'
+      ]);
+      byId('tokenTable').innerHTML = table(['#', 'decode', 'sample', 'token_id', '本次文本', '累计 generated_text', 'stop'], TOKEN_ROWS, r => [
+        String(r.index), '<button class="event-link" data-seq="' + r.decode_event + '">#' + r.decode_event + '</button>', '<button class="event-link" data-seq="' + r.sample_event + '">#' + r.sample_event + '</button>', '<code>' + escapeHtml(r.token_id) + '</code>', '<code>' + escapeHtml(JSON.stringify(r.text_to_send)) + '</code>', '<code>' + escapeHtml(JSON.stringify(r.generated_text)) + '</code>', '<code>' + escapeHtml(r.stop) + '</code>'
+      ]);
+      byId('nextTable').innerHTML = table(['事件', '内部 task_id', '含义'], NEXT_ROWS, r => [
+        '<button class="event-link" data-seq="' + r.event + '">#' + r.event + '</button>', '<code>' + escapeHtml(r.task_id) + '</code>', escapeHtml(r.meaning)
+      ]);
+      document.querySelectorAll('[data-seq]').forEach(btn => btn.addEventListener('click', () => selectEvent(Number(btn.dataset.seq))));
+      document.querySelectorAll('table [data-node]').forEach(btn => btn.addEventListener('click', () => selectNode(btn.dataset.node)));
+    }
+
+    function renderUpdateRounds() {
+      byId('updateRoundList').innerHTML = UPDATE_ROUNDS.map(round => '<button class="update-round-btn" data-round="' + round.round + '">'
+        + '<strong><span>Round ' + round.round + '</span><span>' + escapeHtml(round.batch_tokens === 57 ? 'prefill 57' : 'decode 1') + '</span></strong>'
+        + '<small>slot=' + escapeHtml(round.slot_state) + ' / token=' + escapeHtml(round.token_id) + ' / stop=' + escapeHtml(round.stop) + '</small>'
+        + '<small>generated_text: ' + escapeHtml(round.generated_text) + '</small>'
+        + '</button>').join('');
+      byId('updateRoundList').querySelectorAll('[data-round]').forEach(btn => btn.addEventListener('click', () => selectUpdateRound(Number(btn.dataset.round))));
+      selectUpdateRound(1);
+    }
+
+    function selectUpdateRound(roundNumber) {
+      const round = UPDATE_ROUNDS.find(item => item.round === roundNumber) || UPDATE_ROUNDS[0];
+      byId('updateRoundTitle').textContent = 'Round ' + round.round + ' / ' + (round.batch_tokens === 57 ? 'prefill' : 'generation');
+      byId('updateRoundSummary').textContent = round.prompt_done
+        ? '这一轮先吃完 57 个 prompt token，再采到第一个输出 token。'
+        : round.stop === 'LIMIT'
+          ? '这一轮采到最后一个 token，命中 max_tokens 限制并结束。'
+          : '这一轮把上一个 token 接回上下文，再采样出下一个 token。';
+      byId('updateRoundInputs').innerHTML = [
+        'slot_state = ' + round.slot_state,
+        'prompt_tokens_before = ' + round.prompt_tokens_before,
+        'n_decoded_before = ' + round.n_decoded_before,
+        'batch_tokens = ' + round.batch_tokens
+      ].map(text => '<li>' + escapeHtml(text) + '</li>').join('');
+      byId('updateRoundOutputs').innerHTML = [
+        'token_id = ' + round.token_id,
+        'text_to_send = ' + JSON.stringify(round.text_to_send),
+        'generated_text = ' + JSON.stringify(round.generated_text),
+        'stop = ' + round.stop
+      ].map(text => '<li>' + escapeHtml(text) + '</li>').join('');
+      byId('updateRoundEvents').innerHTML = round.seqs.map(seq => '<button class="event-link" data-seq="' + seq + '">' + escapeHtml(eventLabel(seq)) + '</button>').join('');
+      byId('updateRoundEvents').querySelectorAll('[data-seq]').forEach(btn => btn.addEventListener('click', () => selectEvent(Number(btn.dataset.seq))));
+      document.querySelectorAll('.update-round-btn').forEach(btn => btn.classList.toggle('active', Number(btn.dataset.round) === round.round));
+    }
+
+    function renderFilters() {
+      const filter = byId('phaseFilter');
+      for (const phase of [...new Set(TRACE_EVENTS.map(e => e.phase))]) {
+        const option = document.createElement('option');
+        option.value = phase;
+        option.textContent = phase;
+        filter.appendChild(option);
+      }
+    }
+
+    function matchesEvent(ev) {
+      const filter = byId('phaseFilter');
+      const search = byId('search');
+      if (filter.value && ev.phase !== filter.value) return false;
+      const q = search.value.trim().toLowerCase();
+      if (!q) return true;
+      return (ev.phase + ' ' + JSON.stringify(ev.data)).toLowerCase().includes(q);
+    }
+
+    function renderEvents() {
+      const list = byId('eventList');
+      list.innerHTML = '';
+      for (const ev of TRACE_EVENTS.filter(matchesEvent)) {
+        const btn = document.createElement('button');
+        btn.className = 'event-btn';
+        btn.dataset.seq = ev.seq;
+        btn.innerHTML = '<strong class="phase">#' + ev.seq + ' ' + escapeHtml(ev.phase) + '</strong><small>' + ms(ev) + '</small>';
+        btn.addEventListener('click', () => selectEvent(ev.seq));
+        if (ev.seq === selectedSeq) btn.classList.add('active');
+        list.appendChild(btn);
+      }
+    }
+
+    function selectEvent(seq) {
+      selectedSeq = seq;
+      const ev = TRACE_EVENTS.find(e => e.seq === seq) || TRACE_EVENTS[0];
+      byId('eventTitle').innerHTML = '<span class="phase">#' + ev.seq + ' ' + escapeHtml(ev.phase) + '</span>';
+      byId('eventExplanation').textContent = DESCRIPTIONS[ev.phase] || '这是 trace 里记录的真实事件。';
+      byId('eventJson').textContent = pretty(ev);
+      const pills = byId('eventPills');
+      pills.innerHTML = '';
+      const data = ev.data || {};
+      const task = data.task || {};
+      const values = { task_id: data.task_id ?? task.id, slot_id: data.slot_id ?? data.selected_slot, token_id: data.token_id, batch_tokens: data.batch_tokens, n_decoded: data.n_decoded, stop: data.stop, ret: data.ret };
+      for (const [key, value] of Object.entries(values)) {
+        if (value !== undefined) {
+          const pill = document.createElement('span');
+          pill.className = 'pill';
+          pill.textContent = key + ': ' + value;
+          pills.appendChild(pill);
+        }
+      }
+      document.querySelectorAll('.event-btn').forEach(btn => btn.classList.toggle('active', Number(btn.dataset.seq) === seq));
+      const node = NODES.find(n => (n.events || []).includes(seq));
+      if (node) selectNode(node.id);
+    }
+
+    function renderGlossary() {
+      const grid = byId('glossaryGrid');
+      const search = byId('glossarySearch');
+      const meta = byId('glossarySearchMeta');
+      const terms = Object.keys(GLOSSARY);
+
+      function entryFor(term) {
+        return GLOSSARY[term] || GLOSSARY[term.replace(/^HTTP /, '')] || GLOSSARY[term.replace('llama_batch', 'batch')] || GLOSSARY['main()'];
+      }
+
+      function searchableText(term) {
+        const entry = entryFor(term);
+        return [
+          term,
+          entry.analogy,
+          entry.professional,
+          entry.source,
+          ...(entry.related || [])
+        ].join(' ').toLowerCase();
+      }
+
+      function scoreTerm(term, query) {
+        const lowerTerm = term.toLowerCase();
+        if (lowerTerm === query) return 0;
+        if (lowerTerm.startsWith(query)) return 1;
+        if (lowerTerm.includes(query)) return 2;
+        return 3;
+      }
+
+      function attachChipHandlers(root) {
+        root.querySelectorAll('[data-term]').forEach(el => {
+          el.addEventListener('mouseenter', () => window.selectGlossaryTerm(el.dataset.term));
+          el.addEventListener('focus', () => window.selectGlossaryTerm(el.dataset.term));
+          el.addEventListener('click', event => {
+            event.preventDefault();
+            window.selectGlossaryTerm(el.dataset.term);
+          });
+        });
+      }
+
+      function renderTermChips(queryText) {
+        const query = queryText.trim().toLowerCase();
+        const matched = query
+          ? terms.filter(term => searchableText(term).includes(query)).sort((a, b) => scoreTerm(a, query) - scoreTerm(b, query) || a.localeCompare(b))
+          : terms;
+        grid.innerHTML = matched.length
+          ? matched.map(term => '<button class="term-chip" data-term="' + escapeHtml(term) + '">' + escapeHtml(term) + '</button>').join('')
+          : '<div class="glossary-empty">没有匹配词条。可以试试 slot、decode、队列、缓存、OpenAI。</div>';
+        meta.textContent = query ? '匹配 ' + matched.length + ' / ' + terms.length + ' 个词条' : terms.length + ' 个词条';
+        attachChipHandlers(grid);
+        if (matched.length) {
+          window.selectGlossaryTerm(matched[0]);
+        } else {
+          byId('glossaryTitle').textContent = '没有匹配';
+          byId('glossaryAnalogy').textContent = '换一个关键词试试，比如 “slot”、“decode”、“队列”、“缓存”。';
+          byId('glossaryProfessional').textContent = '搜索会匹配术语名、简单类比、专业解释、相关源码和相关词。';
+          byId('glossarySource').textContent = '';
+          byId('glossaryRelated').innerHTML = '';
+        }
+      }
+
+      window.selectGlossaryTerm = function(term) {
+        const entry = entryFor(term);
+        const shownTerm = GLOSSARY[term] ? term : Object.keys(GLOSSARY).find(key => GLOSSARY[key] === entry) || term;
+        byId('glossaryTitle').textContent = shownTerm;
+        byId('glossaryAnalogy').textContent = entry.analogy || '';
+        byId('glossaryProfessional').textContent = entry.professional || '';
+        byId('glossarySource').textContent = entry.source ? '相关源码: ' + entry.source : '';
+        byId('glossaryRelated').innerHTML = (entry.related || []).map(rel => '<button class="related-chip" data-term="' + escapeHtml(rel) + '">' + escapeHtml(rel) + '</button>').join('');
+        document.querySelectorAll('.term-chip').forEach(chip => chip.classList.toggle('active', chip.dataset.term === shownTerm));
+        attachChipHandlers(byId('glossaryRelated'));
+      };
+
+      document.querySelectorAll('.term, .slide-term').forEach(el => {
+        el.addEventListener('mouseenter', () => window.selectGlossaryTerm(el.dataset.term));
+        el.addEventListener('focus', () => window.selectGlossaryTerm(el.dataset.term));
+        el.addEventListener('click', event => {
+          event.preventDefault();
+          window.selectGlossaryTerm(el.dataset.term);
+        });
+      });
+      search.addEventListener('input', () => renderTermChips(search.value));
+      renderTermChips('');
+    }
+
+    function setMode(mode) {
+      document.body.classList.toggle('presentation', mode === 'presentation');
+      byId('presentationBtn').classList.toggle('active', mode === 'presentation');
+      byId('deepBtn').classList.toggle('active', mode === 'deep');
+      if (mode === 'presentation') setSlide(currentSlideIndex);
+    }
+
+    renderDeck();
+    renderTalkTrack();
+    renderNav();
+    renderDiagram();
+    renderEdges();
+    renderTables();
+    renderUpdateRounds();
+    renderFilters();
+    renderEvents();
+    renderGlossary();
+    byId('requestJson').textContent = pretty(REQUEST_JSON);
+    byId('promptText').textContent = PROMPT_TEXT;
+    byId('responseJson').textContent = pretty(RESPONSE_JSON);
+    byId('rawTrace').textContent = RAW_TRACE;
+    byId('phaseFilter').addEventListener('change', renderEvents);
+    byId('search').addEventListener('input', renderEvents);
+    byId('presentationBtn').addEventListener('click', () => setMode('presentation'));
+    byId('deepBtn').addEventListener('click', () => setMode('deep'));
+    byId('deckDeepBtn').addEventListener('click', () => setMode('deep'));
+    byId('prevSlideBtn').addEventListener('click', () => changeSlide(-1));
+    byId('nextSlideBtn').addEventListener('click', () => changeSlide(1));
+    byId('expandBtn').addEventListener('click', () => {
+      setMode('deep');
+      byId('diagram').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    document.addEventListener('keydown', event => {
+      if (!document.body.classList.contains('presentation')) return;
+      const tag = document.activeElement?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (event.key === 'ArrowRight' || event.key === 'PageDown' || event.key === ' ') {
+        event.preventDefault();
+        changeSlide(1);
+      }
+      if (event.key === 'ArrowLeft' || event.key === 'PageUp') {
+        event.preventDefault();
+        changeSlide(-1);
+      }
+    });
+    selectNode(selectedNodeId);
+    setMode('presentation');
+  </script>
+</body>
+</html>
