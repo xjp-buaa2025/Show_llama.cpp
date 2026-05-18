@@ -172,10 +172,24 @@
     .decode-chain-card strong { font-size: 16px; }
     .decode-chain-card small { color: var(--muted); }
     .decode-chain-card code { width: fit-content; justify-self: center; background: #f5f8f7; border-radius: 6px; padding: 4px 7px; font-size: 12px; }
-    .llama-block-grid { width: 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; align-content: center; }
-    .llama-block-card { min-height: 146px; border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 14px; display: grid; gap: 7px; align-content: start; }
-    .llama-block-card strong { color: var(--teal); font-size: 16px; }
-    .llama-block-card small { color: var(--muted); }
+    .decode-io-grid { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) 92px minmax(0, 1fr); gap: 14px; align-items: stretch; }
+    .decode-io-arrow { display: grid; place-items: center; color: var(--violet); font-size: 34px; font-weight: 700; }
+    .decode-io-card { border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 18px; min-height: 260px; display: grid; gap: 10px; align-content: start; }
+    .decode-io-card.accent { border-color: #d9c8ed; background: var(--violet-soft); }
+    .decode-io-card h3 { font-size: 20px; }
+    .decode-io-card code { width: fit-content; background: #f5f8f7; border-radius: 6px; padding: 3px 6px; }
+    .runtime-stack, .graph-lifecycle, .attention-path, .logits-path { width: 100%; display: grid; gap: 10px; align-content: center; }
+    .runtime-stack { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .graph-lifecycle, .attention-path, .logits-path { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    .runtime-step, .graph-step, .path-card { border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 14px; display: grid; gap: 8px; align-content: start; position: relative; }
+    .runtime-step { min-height: 200px; }
+    .graph-step, .path-card { min-height: 170px; }
+    .runtime-step:not(:last-child)::after, .graph-step:not(:last-child)::after, .path-card:not(:last-child)::after { content: '→'; position: absolute; right: -10px; top: 50%; transform: translateY(-50%); color: var(--teal); font-size: 22px; font-weight: 700; }
+    .runtime-step strong, .graph-step strong, .path-card strong { color: var(--teal); font-size: 16px; }
+    .runtime-step small, .graph-step small, .path-card small { color: var(--muted); }
+    .runtime-step code, .graph-step code, .path-card code { width: fit-content; background: #f5f8f7; border-radius: 6px; padding: 3px 6px; font-size: 12px; }
+    .path-card.highlight { background: var(--gold-soft); border-color: #ead9a1; }
+    .path-card.final { background: var(--green-soft); border-color: #c6dbcf; }
     .batch-strip { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
     .batch-pill { border: 1px solid var(--line); border-radius: 999px; background: #fff; padding: 8px 10px; text-align: center; font-family: var(--mono); }
     .batch-pill:first-child { background: var(--gold-soft); color: #4e3e06; font-weight: 700; }
@@ -284,7 +298,7 @@
     body.presentation .flow-arrow-text { color: #425153; background: #fff; font-weight: 600; }
     body.presentation .flow-arrow { min-height: 42px; }
     @media (max-width: 1280px) { .app { grid-template-columns: 280px minmax(0, 1fr) 330px; } }
-    @media (max-width: 1120px) { .app { display: block; } .left-nav, .glossary-side { position: static; height: auto; margin-bottom: 18px; } .top-grid, .talk-grid, .layout, .io-grid, body.presentation .presentation-stage, .transform-grid, .task-formation, .schedule-grid, .result-grid, .pipeline-grid, .decode-chain, .llama-block-grid, .hero-chain, .recap-chain, .deck-metrics, .lane-row, .token-growth, .round-grid, .update-overview, .update-round-layout, .update-detail-grid { grid-template-columns: 1fr; } .panel, .focus-panel { position: static; } h1 { font-size: 28px; } .flow-node { grid-template-columns: 38px minmax(0, 1fr); } .flow-kind { display: none; } .deck-shell { min-height: auto; } .deck-stage, .deck-slide { min-height: auto; } .slide-top, .deck-toolbar, .deck-status, .deck-controls { display: grid; justify-content: stretch; } .slide-takeaway { max-width: none; } .chain-card:not(:last-child)::after, .recap-card:not(:last-child)::after, .schedule-step:not(:last-child)::after, .pipeline-card:not(:last-child)::after, .decode-chain-card:not(:last-child)::after, .update-step:not(:last-child)::after { display: none; } .batch-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 1120px) { .app { display: block; } .left-nav, .glossary-side { position: static; height: auto; margin-bottom: 18px; } .top-grid, .talk-grid, .layout, .io-grid, body.presentation .presentation-stage, .transform-grid, .task-formation, .schedule-grid, .result-grid, .pipeline-grid, .decode-chain, .decode-io-grid, .runtime-stack, .graph-lifecycle, .attention-path, .logits-path, .hero-chain, .recap-chain, .deck-metrics, .lane-row, .token-growth, .round-grid, .update-overview, .update-round-layout, .update-detail-grid { grid-template-columns: 1fr; } .panel, .focus-panel { position: static; } h1 { font-size: 28px; } .flow-node { grid-template-columns: 38px minmax(0, 1fr); } .flow-kind { display: none; } .deck-shell { min-height: auto; } .deck-stage, .deck-slide { min-height: auto; } .slide-top, .deck-toolbar, .deck-status, .deck-controls { display: grid; justify-content: stretch; } .slide-takeaway { max-width: none; } .chain-card:not(:last-child)::after, .recap-card:not(:last-child)::after, .schedule-step:not(:last-child)::after, .pipeline-card:not(:last-child)::after, .decode-chain-card:not(:last-child)::after, .runtime-step:not(:last-child)::after, .graph-step:not(:last-child)::after, .path-card:not(:last-child)::after, .update-step:not(:last-child)::after { display: none; } .decode-io-arrow { display: none; } .batch-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   </style>
 </head>
 <body>
@@ -329,7 +343,7 @@
           </div>
         </div>
         <div class="deck-status">
-          <span id="deckCounter" class="deck-counter">01 / 12</span>
+          <span id="deckCounter" class="deck-counter">01 / 15</span>
           <div class="deck-progress"><span id="deckProgress"></span></div>
         </div>
         <div id="deckStage" class="deck-stage"></div>
@@ -637,42 +651,63 @@
         terms: ['update_slots()', 'llama_batch', 'llama_decode()', 'logits', 'sampler']
       },
       {
-        kicker: '07 / llama_decode 不是黑盒',
-        title: 'llama_decode() 往下，是 ctx->decode()、ubatch、ggml graph 和 backend。',
-        lead: 'server.cpp 只看到一个函数调用；真正的前向计算在 llama_context::decode() 里拆 batch、准备 KV cache、构建计算图，再交给 ggml backend 执行。',
-        takeaway: 'llama_decode() 是入口；底下跑的是一张张 ggml 计算图。',
-        terms: ['llama_context::decode()', 'ubatch', 'ggml graph', 'backend scheduler', 'ggml op']
+        kicker: '07 / decode 的输入输出边界',
+        title: '从 update_slots() 看，llama_decode() 不是“生成文字”，而是更新状态并产出 logits。',
+        lead: 'server.cpp 把本轮要算的 token、position、seq id 和“哪些位置要取 logits”塞进 llama_batch。decode 读这个 batch，写 KV cache，再把需要输出的位置变成 sampler 能看的 logits。',
+        takeaway: '前面接 slot/batch；后面接 sampler/process_token()。',
+        terms: ['llama_batch', 'llama_decode()', 'KV cache', 'logits', 'sampling']
       },
       {
-        kicker: '08 / 一层 Transformer 里算什么',
-        title: 'Llama block 的核心，就是 attention、FFN 和最后的 logits。',
-        lead: '每层都把 hidden state 经过 RMSNorm、Q/K/V、RoPE、KV cache、attention、FFN；最后 lm_head 把 hidden state 投到整个词表，形成 sampler 要看的 logits。',
-        takeaway: '文字生成的最底层，是一串张量操作和矩阵乘。',
-        terms: ['RMSNorm', 'RoPE', 'self-attention', 'FFN', 'matmul / mul_mat']
+        kicker: '08 / ctx->decode() 的现场准备',
+        title: 'llama_decode() 进来后，先把一次 batch 变成能执行的 ubatch。',
+        lead: 'C API 进入 llama_context::decode() 后，会检查 batch、准备输出 buffer、让 memory/KV cache 找位置，再按 ubatch 循环推进。这里还没到矩阵乘，重点是把运行时现场摆好。',
+        takeaway: 'ctx->decode() 是运行时总控：拆分、定位、循环，再交给图执行。',
+        terms: ['llama_context::decode()', 'ubatch', 'KV cache', 'logits']
       },
       {
-        kicker: '09 / update_slots 的 8 轮节拍',
+        kicker: '09 / process_ubatch() 执行计算图',
+        title: '真正的底层计算，是给一个 ubatch 建图、填输入、让 backend scheduler 跑图。',
+        lead: 'process_ubatch() 会拿到本轮 token 的张量入口，复用或构建 ggml graph，把 token、position、attention mask、K/V 地址等输入填进去，然后由 backend scheduler 分配到 CPU/GPU backend 执行。',
+        takeaway: '到了这里，函数调用已经变成一张可执行的 ggml tensor graph。',
+        terms: ['process_ubatch()', 'ggml graph', 'backend scheduler', 'ggml op', 'matmul / mul_mat']
+      },
+      {
+        kicker: '10 / attention 半层',
+        title: '一层 Llama block 的前半段，是从 hidden state 算出“该看哪些上下文”。',
+        lead: 'token id 先变成 hidden vector。进入每层后，RMSNorm 稳住数值，Q/K/V 投影做三次矩阵乘，RoPE 把位置信息旋进 Q/K，K/V 写进 cache，attention 再用 Q 去读历史 K/V。',
+        takeaway: 'attention 不是一句话理解上下文，而是一串可落到 tensor op 的读写和矩阵乘。',
+        terms: ['RMSNorm', 'RoPE', 'KV write', 'self-attention', 'matmul / mul_mat']
+      },
+      {
+        kicker: '11 / FFN 到 logits',
+        title: 'attention 的结果还要过 FFN，最后才投到词表变成 logits。',
+        lead: 'attention 输出会和残差相加，再经过第二个 RMSNorm 与 FFN。所有层跑完后，output norm 和 lm_head 把最后 hidden state 投到 vocab 维度；sampler 看到的就是这张候选 token 分数表。',
+        takeaway: '这页把底层计算接回后面：logits 出来以后，server.cpp 才能采样 token。',
+        terms: ['FFN', 'RMSNorm', 'logits', 'sampler', 'sampling']
+      },
+      {
+        kicker: '12 / update_slots 的 8 轮节拍',
         title: '一次真实请求里，update_slots() 实际推进了 8 轮。',
         lead: '第 1 轮吃完整个 prompt；第 2 到第 8 轮，每轮只推进一个新 token，并让 generated_text 再长一点。',
         takeaway: 'update_slots() 不是一次做完，而是一轮轮把 slot 往前推。',
         terms: ['update_slots()', 'slot', 'batch', 'process_token()', 'stop=LIMIT']
       },
       {
-        kicker: '10 / 输出如何长出来',
+        kicker: '13 / 输出如何长出来',
         title: '回答不是一下子出现的，而是 token 一步一步累积。',
         lead: '这页只看真实生成过程。你会看到 generated_text 如何从空串逐步变成最终输出。',
         takeaway: '模型先选 token_id，再 detokenize 成文本片段。',
         terms: ['sampling', 'process_token()', 'detokenize', 'stop=LIMIT']
       },
       {
-        kicker: '11 / 回到 HTTP',
+        kicker: '14 / 回到 HTTP',
         title: 'slot 里的结果，还要再回到等待中的请求线程。',
         lead: '推理主循环不直接回客户端。它先产出 server_task_result，再交给 queue_results，被 handler 取走。',
         takeaway: '后台推理线程和 HTTP 线程，通过结果队列完成最后握手。',
         terms: ['send_final_response()', 'queue_results', 'HTTP handler', 'OAI compatibility']
       },
       {
-        kicker: '12 / 最后复盘',
+        kicker: '15 / 最后复盘',
         title: '把整条链路压缩成 7 个动作。',
         lead: '讲到这里，再回看全图，server.cpp 的主流程就不再是一团代码，而是一条清晰的数据流水线。',
         takeaway: '看懂 server.cpp，先抓住这 7 步。',
@@ -700,6 +735,12 @@
         "professional": "ctx->decode(batch) 是 llama_decode() 的主体实现。它初始化 batch allocator，准备 KV cache，循环处理 ubatch，调用 process_ubatch() 执行 decoder graph，并把 logits/embedding 输出拷回 context 缓冲。",
         "source": "src/llama-context.cpp:976",
         "related": ["llama_decode()", "ubatch", "KV cache", "logits"]
+      },
+      "process_ubatch()": {
+        "analogy": "像把一小盘 token 真正放上生产线：先排工序，再把每个工序交给后端执行。",
+        "professional": "process_ubatch() 为一个 ubatch 准备并执行 decoder graph。它设置 token/position/mask/KV 等输入，尽量复用 graph 结构，再调用 backend scheduler 运行计算图并收集输出。",
+        "source": "src/llama-context.cpp:750",
+        "related": ["ubatch", "ggml graph", "backend scheduler", "logits"]
       },
       "ubatch": {
         "analogy": "像把一大盘 token 分成后端一次能稳稳吃下的小盘。",
@@ -853,30 +894,66 @@
           + '</div>';
       }
       if (index === 6) {
-        return '<div class="decode-chain">'
-          + [
-            ['server.cpp', '调用入口', '4368'],
-            ['llama_decode()', 'C API 包装', '2767'],
-            ['ctx->decode()', '拆 batch / 准备 KV', '976'],
-            ['process_ubatch()', '构建或复用 graph', '750'],
-            ['ggml scheduler', '切给 CPU/GPU backend', '1735'],
-            ['logits buffer', '拷回给 sampler 使用', '1152']
-          ].map(([title, desc, line]) => '<article class="decode-chain-card"><strong>' + escapeHtml(title) + '</strong><small>' + escapeHtml(desc) + '</small><code>' + escapeHtml(line) + '</code></article>').join('')
+        return '<div class="decode-io-grid">'
+          + '<article class="decode-io-card accent"><h3>输入：llama_batch</h3><code>slot 3 / task 0</code><ul>'
+          + '<li>token id 或 embedding</li>'
+          + '<li>position 与 seq id</li>'
+          + '<li>哪些位置需要 logits</li>'
+          + '<li>prefill 时 57 个 token，续写时 1 个 token</li>'
+          + '</ul></article>'
+          + '<div class="decode-io-arrow">→</div>'
+          + '<article class="decode-io-card"><h3>输出：状态 + logits</h3><code>ret = 0</code><ul>'
+          + '<li>K/V 写入 KV cache，供后续 token 复用</li>'
+          + '<li>最后位置的 hidden state 经过 lm_head</li>'
+          + '<li>logits 留给 sampler 选下一个 token</li>'
+          + '<li>不会直接返回自然语言文本</li>'
+          + '</ul></article>'
           + '</div>';
       }
       if (index === 7) {
-        return '<div class="llama-block-grid">'
+        return '<div class="runtime-stack">'
           + [
-            ['1. token embedding', '按 token id 从 tok_embd 取 hidden vector。'],
-            ['2. RMSNorm', '稳定 hidden state，作为 attention 输入。'],
-            ['3. Q/K/V 投影', '三次矩阵乘生成 query、key、value。'],
-            ['4. RoPE + KV write', '把位置旋进 Q/K，并把 K/V 写入 cache。'],
-            ['5. attention', 'KQ 打分、mask/softmax，再乘 V 得到上下文。'],
-            ['6. FFN + lm_head', '门控前馈网络后投到 vocab，得到 logits。']
-          ].map(([title, desc]) => '<article class="llama-block-card"><strong>' + escapeHtml(title) + '</strong><small>' + escapeHtml(desc) + '</small></article>').join('')
+            ['1. 检查 batch', '确认 token/embd、n_tokens、seq id 与 logits 标记合法。', 'validate'],
+            ['2. 准备 KV 位置', 'memory context 为本轮 token 找 cache slot，并处理 position。', 'KV cache'],
+            ['3. 拆成 ubatch', '按 n_ubatch 与 backend 能力切成更小的可执行批次。', 'ubatch'],
+            ['4. 收集输出', '每个 ubatch 跑完后，把 logits/embedding 拷回 context buffer。', 'output']
+          ].map(([title, desc, code]) => '<article class="runtime-step"><strong>' + escapeHtml(title) + '</strong><small>' + escapeHtml(desc) + '</small><code>' + escapeHtml(code) + '</code></article>').join('')
           + '</div>';
       }
       if (index === 8) {
+        return '<div class="graph-lifecycle">'
+          + [
+            ['1. 准备输入张量', 'token、position、mask、K/V 地址都变成 graph 的输入。', 'inputs'],
+            ['2. 构建 / 复用图', 'model.build_graph() 展开一层层 Llama block。', 'ggml_cgraph'],
+            ['3. 填入本轮数据', '同一张图结构可以复用，张量内容每轮更新。', 'set_inputs'],
+            ['4. backend scheduler', '把 graph split 分配给 CPU/GPU backend 执行。', 'compute'],
+            ['5. 读回结果', '输出张量进入 logits buffer，等待 sampler。', 'outputs']
+          ].map(([title, desc, code]) => '<article class="graph-step"><strong>' + escapeHtml(title) + '</strong><small>' + escapeHtml(desc) + '</small><code>' + escapeHtml(code) + '</code></article>').join('')
+          + '</div>';
+      }
+      if (index === 9) {
+        return '<div class="attention-path">'
+          + [
+            ['1. token embedding', 'token id 查 tok_embd，得到 hidden vector。', 'tok_embd', ''],
+            ['2. RMSNorm', '先把 hidden state 的尺度稳定住。', 'attn_norm', ''],
+            ['3. Q/K/V 投影', '三组权重矩阵分别生成 query、key、value。', 'mul_mat', ''],
+            ['4. RoPE + KV write', '位置旋进 Q/K；K/V 写入 cache。', 'rope / cache', 'highlight'],
+            ['5. self-attention', 'Q 和历史 K/V 计算权重，再读出上下文。', 'KQ * V', 'final']
+          ].map(([title, desc, code, extra]) => '<article class="path-card ' + extra + '"><strong>' + escapeHtml(title) + '</strong><small>' + escapeHtml(desc) + '</small><code>' + escapeHtml(code) + '</code></article>').join('')
+          + '</div>';
+      }
+      if (index === 10) {
+        return '<div class="logits-path">'
+          + [
+            ['1. attention 输出', '上下文向量回到主干，并做 residual add。', 'residual', ''],
+            ['2. FFN 前 RMSNorm', '进入前馈网络前再稳定一次 hidden state。', 'ffn_norm', ''],
+            ['3. FFN', 'gate/up/down projection 加激活函数，继续变换每个 token。', 'SwiGLU', ''],
+            ['4. output norm + lm_head', '所有层跑完后，把 hidden state 投到 vocab 维度。', 'lm_head', 'highlight'],
+            ['5. logits 给 sampler', '每个词表 token 得到一个分数，server.cpp 在这里接回采样。', 'logits', 'final']
+          ].map(([title, desc, code, extra]) => '<article class="path-card ' + extra + '"><strong>' + escapeHtml(title) + '</strong><small>' + escapeHtml(desc) + '</small><code>' + escapeHtml(code) + '</code></article>').join('')
+          + '</div>';
+      }
+      if (index === 11) {
         return '<div class="round-grid">'
           + UPDATE_ROUNDS.map(round => '<article class="round-card' + (round.round === UPDATE_ROUNDS.length ? ' final' : '') + '">'
             + '<span>Round ' + round.round + '</span>'
@@ -887,12 +964,12 @@
           + '</article>').join('')
           + '</div>';
       }
-      if (index === 9) {
+      if (index === 12) {
         return '<div class="token-growth">'
           + TOKEN_ROWS.map((row, idx) => '<article class="token-step' + (idx === TOKEN_ROWS.length - 1 ? ' final' : '') + '"><code>' + escapeHtml(String(row.token_id)) + '</code><strong>' + escapeHtml(row.generated_text || ' ') + '</strong><small>' + escapeHtml('本轮新增: ' + JSON.stringify(row.text_to_send) + ' / ' + row.stop) + '</small></article>').join('')
           + '</div>';
       }
-      if (index === 10) {
+      if (index === 13) {
         const responsePreview = pretty({
           content: RESPONSE_JSON.choices?.[0]?.message?.content,
           prompt_tokens: RESPONSE_JSON.usage?.prompt_tokens,
