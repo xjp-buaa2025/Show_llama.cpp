@@ -199,6 +199,24 @@
     .update-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
     .update-detail-box { border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 10px; }
     .update-event-list { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+    .decode-overview { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 14px; }
+    .decode-card { border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 12px; min-height: 112px; display: grid; align-content: center; gap: 6px; }
+    .decode-card strong { font-size: 17px; }
+    .decode-card small { color: var(--muted); }
+    .decode-pipeline { display: grid; gap: 10px; }
+    .decode-stage { border: 1px solid var(--line); border-left: 5px solid var(--violet); border-radius: 8px; background: #fbfcfb; padding: 12px; display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: 12px; align-items: start; }
+    .decode-stage b { display: block; font-size: 15px; }
+    .decode-stage code { background: #eef4f1; border-radius: 6px; padding: 2px 5px; }
+    .decode-stage ul { margin: 0; }
+    .transformer-path { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 10px; margin-top: 12px; }
+    .transformer-step { border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 12px; min-height: 132px; display: grid; gap: 6px; align-content: start; }
+    .transformer-step strong { color: var(--teal); }
+    .tensor-sample { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-top: 12px; }
+    .tensor-note { border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 12px; }
+    .tensor-note b { display: block; margin-bottom: 6px; }
+    .decode-detail { border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 10px 12px; margin-top: 10px; }
+    .decode-detail summary { cursor: pointer; font-weight: 700; }
+    .source-map td:first-child { white-space: nowrap; font-family: var(--mono); color: var(--teal); }
     .deck-controls { border-top: 1px solid var(--line); padding-top: 14px; }
     .deck-nav-btn { border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 8px 12px; cursor: pointer; }
     .deck-nav-btn:hover, .deck-nav-btn:focus-visible { border-color: var(--teal); background: var(--teal-soft); }
@@ -393,6 +411,110 @@
       </section>
 
       <section class="deep-only">
+        <h2 id="decode-deep">llama_decode() 底层深潜</h2>
+        <p>这一层从 <button class="term" data-term="llama_decode()">llama_decode()</button> 往下看：它不是“一个大函数直接算完”，而是把输入整理成 <button class="term" data-term="ubatch">ubatch</button>，构建或复用 <button class="term" data-term="ggml graph">ggml graph</button>，再让 <button class="term" data-term="backend scheduler">backend scheduler</button> 把图交给 CPU/GPU 后端执行。</p>
+        <div class="decode-overview">
+          <article class="decode-card"><strong>server.cpp</strong><small>只负责把 batch_view 喂给模型入口</small><code>tools/server/server.cpp:4368</code></article>
+          <article class="decode-card"><strong>C API 包装</strong><small>转成 ctx->decode(batch)</small><code>src/llama-context.cpp:2767</code></article>
+          <article class="decode-card"><strong>context decode</strong><small>拆 batch、准备 KV、取回 logits</small><code>src/llama-context.cpp:976</code></article>
+          <article class="decode-card"><strong>模型图</strong><small>Llama block 被展开成 ggml tensor op</small><code>src/models/llama.cpp:4</code></article>
+          <article class="decode-card"><strong>后端执行</strong><small>CPU/CUDA/Metal/Vulkan 按节点跑 kernel</small><code>ggml/src/ggml-backend.cpp:1735</code></article>
+        </div>
+
+        <h3>一次 llama_decode 的真实内部链路</h3>
+        <div class="decode-pipeline">
+          <article class="decode-stage">
+            <b>1. 校验输入</b>
+            <ul>
+              <li><code>llama_decode(ctx, batch)</code> 进入 <button class="term" data-term="llama_context::decode()">llama_context::decode()</button>。</li>
+              <li>要求 token 和 embedding 二选一，且 <code>n_tokens &gt; 0</code>。</li>
+              <li>本次 trace 第一轮 <code>batch_tokens=57</code>，后续每轮 <code>batch_tokens=1</code>。</li>
+            </ul>
+          </article>
+          <article class="decode-stage">
+            <b>2. batch -> ubatch</b>
+            <ul>
+              <li><code>balloc->init()</code> 把用户 batch 标准化：token、pos、seq_id、logits/output 标记。</li>
+              <li><code>memory->init_batch()</code> 结合 KV cache 给出本轮可计算的 micro-batch。</li>
+              <li><button class="term" data-term="ubatch">ubatch</button> 是真正进入计算图的更小单位，受 <code>n_ubatch</code>、上下文和 cache 空间限制。</li>
+            </ul>
+          </article>
+          <article class="decode-stage">
+            <b>3. 准备 KV cache</b>
+            <ul>
+              <li><code>memory_update(false)</code> 处理延迟的 shift/copy。</li>
+              <li>prefill 会把 57 个 prompt token 的 K/V 写进 cache。</li>
+              <li>生成阶段只把新 token 追加进 cache，历史上下文靠已有 K/V 复用。</li>
+            </ul>
+          </article>
+          <article class="decode-stage">
+            <b>4. build/reuse graph</b>
+            <ul>
+              <li><code>process_ubatch()</code> 计算 graph 参数，能复用就复用上一张图。</li>
+              <li>不能复用时调用 <code>model.build_graph()</code>，按模型架构选择 <code>llm_build_llama</code>。</li>
+              <li>这一步只是搭出计算图节点，还没有真正算矩阵乘。</li>
+            </ul>
+          </article>
+          <article class="decode-stage">
+            <b>5. set inputs + compute</b>
+            <ul>
+              <li><code>res->set_inputs(&ubatch)</code> 把 token、pos、attention mask、KV index 填进图输入张量。</li>
+              <li><code>graph_compute()</code> 设置线程池和后端线程数。</li>
+              <li><code>ggml_backend_sched_graph_compute_async()</code> 开始真正执行。</li>
+            </ul>
+          </article>
+          <article class="decode-stage">
+            <b>6. 取回 logits</b>
+            <ul>
+              <li>图算完后拿到 <code>res->get_logits()</code>。</li>
+              <li><code>ggml_backend_tensor_get_async()</code> 把需要输出的 logits 拷到 context 的输出缓冲。</li>
+              <li>server 后面才调用 sampler，把 logits 变成 token_id。</li>
+            </ul>
+          </article>
+        </div>
+
+        <details class="decode-detail" open>
+          <summary>Llama block 在图里具体算什么</summary>
+          <div class="transformer-path">
+            <article class="transformer-step"><strong>token -> embedding</strong><span><code>ggml_get_rows(tok_embd, tokens)</code> 按 token id 查 embedding 行。</span></article>
+            <article class="transformer-step"><strong>RMSNorm</strong><span><button class="term" data-term="RMSNorm">RMSNorm</button> 归一化当前 hidden state，为 attention 输入做尺度稳定。</span></article>
+            <article class="transformer-step"><strong>Q/K/V 投影</strong><span><button class="term" data-term="matmul / mul_mat">mul_mat</button> 分别乘 <code>wq/wk/wv</code> 得到 query、key、value。</span></article>
+            <article class="transformer-step"><strong>RoPE</strong><span><button class="term" data-term="RoPE">RoPE</button> 把位置信息旋进 Q/K，模型因此知道 token 的顺序。</span></article>
+            <article class="transformer-step"><strong>KV 写入</strong><span><button class="term" data-term="KV write">KV write</button> 把本轮 K/V 存入 cache，后续 token 复用历史。</span></article>
+            <article class="transformer-step"><strong>attention</strong><span>常规路径是 <code>K^T * Q -> mask/scale -> softmax -> V * score</code>；开启 flash attention 时合成一个 op。</span></article>
+            <article class="transformer-step"><strong>输出投影 + 残差</strong><span><code>wo</code> 把 attention 结果投回 hidden size，再和输入残差相加。</span></article>
+            <article class="transformer-step"><strong>FFN</strong><span><button class="term" data-term="FFN">FFN</button> 做 gate/up、SiLU 激活、down projection，再走一次残差。</span></article>
+            <article class="transformer-step"><strong>lm_head</strong><span>最后 <code>output_norm</code> 加 <code>model.output</code>，得到 vocab 大小的 logits。</span></article>
+          </div>
+        </details>
+
+        <div class="tensor-sample">
+          <article class="tensor-note"><b>prefill 为什么快一些</b>第一轮一次处理 57 个 prompt token，矩阵乘可以批量跑，吞吐更好；它的核心成本是把整段 prompt 的 K/V 全部写进 cache。</article>
+          <article class="tensor-note"><b>generation 为什么每步只喂 1 个 token</b>采样出一个 token 后，下一轮只需要把这个新 token 接回上下文。历史 token 不重算 attention 投影，直接读 KV cache。</article>
+          <article class="tensor-note"><b>“最底层”在哪里</b>如果走 CPU，最终会到 <code>ggml_compute_forward()</code> 的 <code>GGML_OP_MUL_MAT</code>、<code>GGML_OP_SOFT_MAX</code> 等 case；如果走 GPU，同一张图会被 scheduler 切给对应 backend kernel。</article>
+        </div>
+
+        <h3 style="margin-top:16px">源码读图路线</h3>
+        <div class="table-wrap">
+          <table class="source-map">
+            <thead><tr><th>层级</th><th>源码位置</th><th>你该看什么</th></tr></thead>
+            <tbody>
+              <tr><td>server 调用点</td><td>tools/server/server.cpp:4368</td><td><code>llama_decode(ctx, batch_view)</code> 前后的 trace、ret 处理、sampler 衔接。</td></tr>
+              <tr><td>C API</td><td>src/llama-context.cpp:2767</td><td><code>llama_decode()</code> 只是调用 <code>ctx->decode(batch)</code> 并记录错误。</td></tr>
+              <tr><td>decode 主体</td><td>src/llama-context.cpp:976</td><td>batch 标准化、KV cache 准备、ubatch 循环、logits 拷回。</td></tr>
+              <tr><td>ubatch 处理</td><td>src/llama-context.cpp:750</td><td>图复用、<code>model.build_graph()</code>、输入填充、<code>graph_compute()</code>。</td></tr>
+              <tr><td>模型图分派</td><td>src/llama-model.cpp:6852</td><td>根据 arch 选择 <code>llm_build_llama</code>、Qwen、Gemma 等不同图构建器。</td></tr>
+              <tr><td>Llama 图</td><td>src/models/llama.cpp:4</td><td>一层层展开 RMSNorm、Q/K/V、RoPE、attention、FFN、lm_head。</td></tr>
+              <tr><td>attention helper</td><td>src/llama-graph.cpp:1338, 1581</td><td>KV cache 写入、常规 attention 或 flash attention 的张量操作。</td></tr>
+              <tr><td>op 创建</td><td>ggml/src/ggml.c:3102</td><td><code>ggml_mul_mat()</code> 这样的 API 只是创建带 op 类型的 tensor 节点。</td></tr>
+              <tr><td>scheduler</td><td>ggml/src/ggml-backend.cpp:1716, 1735</td><td>分配 graph、切 backend split、把节点交给 CPU/GPU 后端。</td></tr>
+              <tr><td>CPU kernel</td><td>ggml/src/ggml-cpu/ggml-cpu.c:1661, 2867</td><td>线程遍历 graph node，按 <code>GGML_OP_*</code> switch 到具体 kernel。</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="deep-only">
         <h2>真实生成循环</h2>
         <p>这里保留真实运行数据：第一次 decode 是 prompt prefill，后续 decode 每次接回一个 token，然后采样出下一个 token。</p>
         <h3>decode 批次</h3>
@@ -548,6 +670,74 @@
       {"round":8,"start_event":91,"slot_state":"GENERATING","prompt_tokens_before":63,"n_decoded_before":7,"batch_tokens":1,"token_id":447,"text_to_send":"A","generated_text":"\"Here!\" A","stop":"LIMIT","prompt_done":false,"seqs":[91,93,94,95,96,97]}
     ];
     const GLOSSARY = {"main()":{"analogy":"像 server 进程的总控台，先把电源、窗口、工位和传送带都打开。","professional":"C++ 程序入口。负责解析参数、加载模型、创建 server_context 和 httplib::Server、注册路由，最后进入 queue_tasks.start_loop()。","source":"tools/server/server.cpp:4671","related":["server_context","httplib::Server","route","queue_tasks"]},"server_context":{"analogy":"像后厨总调度台，所有工位、队列、模型上下文都在这里登记。","professional":"server.cpp 中的核心运行时对象，持有 slots、queue_tasks、queue_results、模型 context、参数和统计信息，HTTP handler 与主循环都围绕它协作。","source":"server_context 结构体及相关方法","related":["slot","queue_tasks","queue_results","ctx / llama_context"]},"httplib::Server":{"analogy":"像 HTTP 前台接待窗口，负责听端口和把客人分到对应窗口。","professional":"cpp-httplib 提供的 HTTP server 对象。server.cpp 用它注册 POST /v1/chat/completions 等 route，并把请求转交给 handler。","source":"tools/server/server.cpp:5905-5907","related":["route","handler","/v1/chat/completions"]},"middleware":{"analogy":"像进门前的安检或盖章流程，请求进真正窗口前先过一遍。","professional":"围绕 HTTP 请求的通用前后处理逻辑，比如 CORS、鉴权、日志、错误包装等。它不是推理核心，但会影响请求能否进入 handler。","source":"HTTP server 注册与请求处理周边","related":["handler","route","httplib::Server"]},"handler":{"analogy":"像某个窗口的办事员，某个路由来了就由它处理。","professional":"绑定到 route 的回调函数。比如 handle_chat_completions() 接收 /v1/chat/completions 请求，解析 JSON，并转入后端任务流程。","source":"tools/server/server.cpp:5473","related":["HTTP handler","route","handle_chat_completions()"]},"HTTP handler":{"analogy":"像前台办事员，只负责接单、整理单据、等待后厨结果。","professional":"处理 HTTP 请求的 route callback。它不直接跑模型，而是创建 server_task、投递 queue_tasks，再从 queue_results 等结果。","source":"tools/server/server.cpp:5473","related":["handler","server_task","queue_results"]},"route":{"analogy":"像门牌号，告诉请求该去哪个窗口。","professional":"HTTP method + path 到 handler 的映射。这里 POST /v1/chat/completions 被映射到 handle_chat_completions()。","source":"tools/server/server.cpp:5906","related":["httplib::Server","handler","/v1/chat/completions"]},"server_state":{"analogy":"像工位上的状态灯，告诉你现在空闲、刚开始还是正在生成。","professional":"server 运行时状态枚举/字段，用来描述 slot 或任务处理阶段，例如 IDLE、STARTED、GENERATING 等。trace 里能看到 slot_state 和 active slot state。","source":"slot 状态与 trace events","related":["slot","process_single_task()","update_slots()"]},"server_task":{"analogy":"像一张后厨工单，写着要做什么、做多少、交给谁。","professional":"server 内部工作单，包含 task id、type、prompt token 数、n_predict、stream、oaicompat 等。HTTP 请求会先被包装成 server_task 再进入队列。","source":"tools/server/server.cpp:5222, trace #10","related":["queue_tasks","process_single_task()","server_context"]},"queue_tasks":{"analogy":"像待办工单传送带，前台把工单放上去，后厨主循环来拿。","professional":"HTTP 线程向后台主循环投递 server_task 的队列。start_loop() 从这里取 task，再调用 process_single_task() 或推进 update_slots()。","source":"tools/server/server.cpp:5299, 2236","related":["server_task","start_loop()","deferred task"]},"queue_results":{"analogy":"像出餐台，后厨把做好的结果放上去，前台按号码取走。","professional":"后台推理线程把 server_task_result 交回 HTTP 线程的结果队列。HTTP handler 先登记等待 task id，最终 recv 对应结果。","source":"tools/server/server.cpp:5298, 5312","related":["server_task","send_final_response()","HTTP handler"]},"deferred task":{"analogy":"像暂存工单，当前工位不够或条件不满足时先放一边。","professional":"queue 调度里的延后任务。server 可把暂时不能处理的 task 放入 deferred 队列，等 slot 或条件可用后再 pop 出来处理。","source":"queue_tasks deferred 逻辑","related":["queue_tasks","slot","process_single_task()"]},"slot":{"analogy":"像一个推理工位，一个请求上桌后就在这个工位一步步加工。","professional":"server_slot 保存一次请求的运行时状态，包括 task、prompt 进度、generated_text、采样器、上下文窗口和 KV cache 使用情况。","source":"tools/server/server.cpp:3512, trace #16-#20","related":["server_state","update_slots()","KV cache"]},"batch":{"analogy":"像一次端给模型的一盘 token，可能是一整段 prompt，也可能只有一个新 token。","professional":"llama_batch 是 llama_decode() 的输入批次。本次第一次 batch_tokens=57 做 prompt prefill，后续 batch_tokens=1 推进生成。","source":"tools/server/server.cpp:4368, trace #22/#33","related":["llama_batch","llama_decode()","token"]},"llama_batch":{"analogy":"像一次端给模型的一盘 token，可能是一整段 prompt，也可能只有一个新 token。","professional":"llama.cpp 的批处理输入结构，包含要计算的 token、位置和序列信息。server 在 update_slots() 中构造它，再传给 llama_decode()。","source":"tools/server/server.cpp:4368","related":["batch","update_slots()","llama_decode()"]},"ctx / llama_context":{"analogy":"像模型运行现场，里面有当前上下文、缓存和计算状态。","professional":"llama_context 是 llama.cpp 的推理上下文，承载运行时计算状态、KV cache 和 logits 输出。llama_decode(ctx, batch) 基于它推进模型前向计算。","source":"llama.cpp runtime context","related":["model / llama_model","KV cache","llama_decode()"]},"model / llama_model":{"analogy":"像只读的发动机和说明书，真正的参数权重都在这里。","professional":"llama_model 保存加载后的模型权重和模型元信息。多个 context 可围绕模型创建，推理时 context 引用 model 做计算。","source":"模型加载初始化阶段","related":["ctx / llama_context","vocab","LoRA"]},"vocab":{"analogy":"像模型的字典，告诉模型编号 436 代表哪个文本片段。","professional":"词表记录 token id 与 token piece 的映射，并服务于 tokenize/detokenize。不同模型的 vocab 和特殊 token 规则可能不同。","source":"llama_vocab / tokenizer","related":["tokenize","detokenize","token"]},"KV cache":{"analogy":"像已经算过的上下文笔记，后面生成不用从头重算。","professional":"Transformer attention 的 key/value 缓存。prompt prefill 后，后续每生成一个 token 只需追加计算并复用历史 KV。","source":"llama_context runtime state","related":["ctx / llama_context","prompt cache","llama_decode()"]},"llama_decode()":{"analogy":"像让模型发动机转一圈，输入 token，产出下一步采样需要的分数。","professional":"llama.cpp 的前向计算入口。输入 llama_context 和 llama_batch，更新 KV cache，并产生 logits；它不直接返回文字。","source":"tools/server/server.cpp:4368","related":["llama_batch","logits","sampling"]},"sampling":{"analogy":"像从候选词列表里挑下一个词，temperature=0 时更像选最高分。","professional":"采样根据 logits 和参数如 temperature、top_p、grammar 等选择 token id。server 中 common_sampler_sample() 完成这一步。","source":"tools/server/server.cpp:4470","related":["sampler","logits","process_token()"]},"sampler":{"analogy":"像挑选器，从模型给的一堆分数里选一个 token。","professional":"采样器维护采样状态和参数，根据 logits 选择下一个 token id。本次 trace 采到 436, 440, 411 等 token。","source":"tools/server/server.cpp:4470","related":["sampling","logits","token"]},"logits":{"analogy":"像候选 token 的打分表，分高的不一定必选，但更有机会。","professional":"模型前向计算输出的未归一化分数，sampler 基于 logits 选择下一个 token。本页 trace 没打印完整 logits 数组，因为它很大。","source":"llama_decode() 输出","related":["llama_decode()","sampling","sampler"]},"prompt cache":{"analogy":"像常用开场白的预处理缓存，相同前缀不用每次重算。","professional":"缓存 prompt token 或对应 KV 状态，以减少重复 prompt prefill 成本。server_task 里的 cache_prompt 表示允许复用 prompt 缓存。","source":"server_task.cache_prompt / KV cache 逻辑","related":["KV cache","prompt","server_task"]},"stream / SSE":{"analogy":"像边做边上菜，生成一点就推一点给客户端。","professional":"stream=true 时使用 Server-Sent Events 分块返回 token/partial result。本次请求 stream=false，所以客户端只收到最终 JSON。","source":"handle_completions_impl stream branch","related":["HTTP handler","queue_results","/v1/chat/completions"]},"/v1/chat/completions":{"analogy":"像 OpenAI 兼容的聊天点单窗口。","professional":"server 注册的 OpenAI-compatible chat endpoint。POST 到该路径会进入 handle_chat_completions()。","source":"tools/server/server.cpp:5906","related":["OAI compatibility","handler","chat template"]},"OAI compatibility":{"analogy":"像 OpenAI 口音翻译器，让 llama.cpp server 说同一种 API 方言。","professional":"OpenAI-compatible 请求和响应适配层，把 messages/max_tokens/stream 等字段转换为 server 内部参数，并输出 choices/usage 等格式。","source":"oaicompat_* parsing/response 逻辑","related":["/v1/chat/completions","chat template","server_task"]},"chat template":{"analogy":"像把聊天记录排版成模型熟悉的剧本格式。","professional":"把 role/content messages 展开成 prompt 字符串，加入模型所需特殊标记，如 \u003c|im_start|>user 和 assistant 起始标记。","source":"tools/server/server.cpp:5482, trace #7","related":["prompt","tokenize","OAI compatibility"]},"prompt":{"analogy":"像真正递给模型看的题面，不是原始 JSON 表单。","professional":"模型输入文本。对 chat API 来说，prompt 是 messages 经 chat template 展开后的字符串，再被 tokenizer 转成 token。","source":"trace #7","related":["chat template","tokenize","server_task"]},"token":{"analogy":"像模型读写的积木块，可能是一个字母、词片段或特殊标记。","professional":"token 是模型计算的离散整数单位。文本先 tokenize 成 token id，生成时先得到 token id，再 detokenize 成文本。","source":"tokenizer / sampler trace","related":["vocab","tokenize","detokenize"]},"tokenize":{"analogy":"像把句子切成模型字典里的编号。","professional":"把 prompt 字符串转换为 std::vector\u003cllama_token>。本次 prompt 被切成 57 个 token。","source":"trace #9","related":["prompt","vocab","server_task"]},"detokenize":{"analogy":"像把模型吐出的编号翻译回人能读的文字。","professional":"把 token id 转回文本片段。process_token() 会把 sampled token 转成 text_to_send 并追加到 generated_text。","source":"tools/server/server.cpp:3007","related":["token","process_token()","vocab"]},"embedding":{"analogy":"像把文本压成坐标，方便做相似度比较。","professional":"embedding 模式输出向量表示而不是生成文本。它用于检索、聚类、语义匹配等场景，不是本次 chat completion 主链路。","source":"server embedding endpoints / llama embedding API","related":["ctx / llama_context","rerank","metrics"]},"rerank":{"analogy":"像把搜索候选结果重新排个队。","professional":"rerank 根据 query 与候选文档的相关性打分并重排。它通常走专门模型或接口，不在本次 chat completion 生成链路中。","source":"rerank endpoint/model path","related":["embedding","model / llama_model"]},"LoRA":{"analogy":"像给模型装一个可拆卸的小补丁，不重做整台发动机。","professional":"Low-Rank Adaptation 适配器，可在不修改完整模型权重的情况下改变模型行为。server 可在加载阶段应用 LoRA。","source":"model loading / adapter config","related":["model / llama_model","main()"]},"multimodal / mmproj":{"analogy":"像图片到语言模型之间的转接头。","professional":"多模态 projector 把图像等模态的特征映射到语言模型可接收的 embedding/token 空间。普通文本 chat completion 不会走这条分支。","source":"multimodal/mmproj loading path","related":["model / llama_model","embedding"]},"speculative decoding":{"analogy":"像小助手先草拟，大模型验收，验过就一次前进多步。","professional":"使用 draft model 先生成候选 token，再由 target model 验证，以提升吞吐。server.cpp 中有 speculative decode 分支，但本次 trace 未启用。","source":"update_slots speculative 分支","related":["llama_decode()","sampling","batch"]},"metrics":{"analogy":"像仪表盘，记录跑了多久、每秒多少 token、调用了几次 decode。","professional":"server 暴露性能和运行统计，例如 prompt_ms、predicted_per_second、decode 调用次数等，用于观测和调优。","source":"metrics endpoint / response timings","related":["llama_decode()","stream / SSE"]},"process_single_task()":{"analogy":"像工单分派员，决定这张工单去哪一个工位。","professional":"从主循环拿到 server_task 后，根据类型处理。对 COMPLETION task，它选择 slot 并把 task 挂到 slot 上。","source":"tools/server/server.cpp:3512","related":["server_task","slot","queue_tasks"]},"update_slots()":{"analogy":"像车间节拍器，每一拍推进所有活跃工位一点点。","professional":"扫描 active slots，构造 batch，调用 llama_decode()，采样 token，处理停止条件并发送结果。内部很大，但主线就是推进 slot。","source":"tools/server/server.cpp:3739","related":["slot","llama_decode()","process_token()"]},"process_token()":{"analogy":"像把模型选出的编号贴到回答纸上，并检查要不要停笔。","professional":"把 sampled token detokenize 成 text_to_send，追加到 generated_text，同时判断 EOS、stop word、max_tokens 等停止条件。","source":"tools/server/server.cpp:3007","related":["detokenize","sampling","stop=LIMIT"]},"handle_chat_completions()":{"analogy":"像聊天接口的专属前台，负责把聊天点单转成后厨能处理的格式。","professional":"POST /v1/chat/completions 的 handler。它调用 oaicompat_chat_params_parse() 生成 prompt，再转入 handle_completions_impl()。","source":"tools/server/server.cpp:5473","related":["/v1/chat/completions","chat template","handler"]},"start_loop()":{"analogy":"像后厨流水线的班长，一直看传送带上有没有新工单。","professional":"queue_tasks 的主循环，从 task 队列取任务，调用 process_single_task()，并通过 update_slots() 推进活跃 slots。","source":"tools/server/server.cpp:2236","related":["queue_tasks","process_single_task()","update_slots()"]},"send_final_response()":{"analogy":"像把完成的菜装盘并贴上订单号。","professional":"把 slot 中的最终 generated_text、usage 和 stop reason 包装成 server_task_result，随后通过 queue_results.send() 返回等待中的 HTTP handler。","source":"tools/server/server.cpp:3272","related":["queue_results","server_task","stop=LIMIT"]},"stop=LIMIT":{"analogy":"像写到规定字数就停，不是因为自然结束。","professional":"生成停止原因是达到了 max_tokens/n_predict 限制。本次 completion_tokens=8，所以第 8 个 token 后停止。","source":"trace #96-#97","related":["process_token()","n_predict","metrics"]},"n_predict":{"analogy":"像最多允许写几个 token 的上限。","professional":"server 内部生成上限参数，OpenAI 请求中的 max_tokens 会映射到类似限制。本次 n_predict=8。","source":"server_task.params / trace #10","related":["server_task","stop=LIMIT"]}};
+    Object.assign(GLOSSARY, {
+      "llama_context::decode()": {
+        "analogy": "像模型运行现场里的班长，把一次 batch 拆成能真正上机器的几段小活。",
+        "professional": "ctx->decode(batch) 是 llama_decode() 的主体实现。它初始化 batch allocator，准备 KV cache，循环处理 ubatch，调用 process_ubatch() 执行 decoder graph，并把 logits/embedding 输出拷回 context 缓冲。",
+        "source": "src/llama-context.cpp:976",
+        "related": ["llama_decode()", "ubatch", "KV cache", "logits"]
+      },
+      "ubatch": {
+        "analogy": "像把一大盘 token 分成后端一次能稳稳吃下的小盘。",
+        "professional": "micro-batch。llama_batch_allocr 和 memory context 根据 n_ubatch、序列、输出标记和 KV cache 空间生成 ubatch，真正进入 graph 的是它而不是原始 batch。",
+        "source": "src/llama-context.cpp:1087",
+        "related": ["llama_batch", "ctx / llama_context", "KV cache"]
+      },
+      "ggml graph": {
+        "analogy": "像一张计算施工图，节点写着要做哪种张量运算，边表示数据怎么流。",
+        "professional": "ggml_cgraph 由 model.build_graph() 构建，包含 RMSNorm、mul_mat、RoPE、attention、FFN、lm_head 等 tensor op。图可以复用，输入张量每轮重新填值。",
+        "source": "src/llama-context.cpp:776, src/models/llama.cpp:4",
+        "related": ["backend scheduler", "ggml op", "llama_context::decode()"]
+      },
+      "backend scheduler": {
+        "analogy": "像调度工长，决定每个图节点交给 CPU 还是 GPU 工人。",
+        "professional": "ggml_backend_sched 负责分配 graph、切 split、插入必要拷贝，并调用各 backend 的 graph_compute_async。多后端 offload 时，这里决定执行边界。",
+        "source": "ggml/src/ggml-backend.cpp:1716, 1735",
+        "related": ["ggml graph", "ggml op", "matmul / mul_mat"]
+      },
+      "ggml op": {
+        "analogy": "像最小工序标签，比如矩阵乘、归一化、softmax。",
+        "professional": "ggml_tensor 的 op 字段描述计算类型。CPU 后端在 ggml_compute_forward() 中按 GGML_OP_* switch 调用具体 kernel；GPU 后端则走各自 kernel 或 shader。",
+        "source": "ggml/src/ggml-cpu/ggml-cpu.c:1661",
+        "related": ["ggml graph", "backend scheduler", "matmul / mul_mat"]
+      },
+      "RMSNorm": {
+        "analogy": "像把一组数的音量拉到稳定范围，避免后面计算忽大忽小。",
+        "professional": "Root Mean Square LayerNorm。Llama block 在 attention 前、FFN 前以及输出前使用 RMSNorm 稳定 hidden state。",
+        "source": "src/models/llama.cpp:24, 102, 142",
+        "related": ["FFN", "self-attention", "ggml op"]
+      },
+      "RoPE": {
+        "analogy": "像给 Q/K 坐标旋上位置刻度，让 attention 知道顺序。",
+        "professional": "Rotary Position Embedding。Llama 在 Q/K projection 后对 Qcur、Kcur 调 ggml_rope_ext，把 token 位置编码进注意力计算。",
+        "source": "src/models/llama.cpp:56",
+        "related": ["self-attention", "KV cache", "token"]
+      },
+      "self-attention": {
+        "analogy": "像每个 token 回头看上下文，决定自己该重点参考谁。",
+        "professional": "常规路径会计算 K^T Q、mask/scale、softmax，再乘 V；flash attention 路径用 ggml_flash_attn_ext 合并这些步骤。",
+        "source": "src/llama-graph.cpp:1338",
+        "related": ["RoPE", "KV cache", "matmul / mul_mat"]
+      },
+      "FFN": {
+        "analogy": "像每层里的独立加工站，在 attention 后对每个 token 的表示再变换一次。",
+        "professional": "Feed-forward network。Llama 使用 gate/up/down projection 和 SiLU 激活；非 MoE 路径由 build_ffn() 构建。",
+        "source": "src/models/llama.cpp:99",
+        "related": ["RMSNorm", "matmul / mul_mat", "ggml graph"]
+      },
+      "matmul / mul_mat": {
+        "analogy": "像大多数算力花掉的地方，把一批向量乘上权重矩阵。",
+        "professional": "ggml_mul_mat() 创建 GGML_OP_MUL_MAT 节点。Q/K/V 投影、attention 里的 KQ/KQV、FFN 投影和 lm_head 都大量依赖它。",
+        "source": "ggml/src/ggml.c:3102, ggml/src/ggml-cpu/ggml-cpu.c:1210",
+        "related": ["ggml op", "self-attention", "FFN"]
+      },
+      "KV write": {
+        "analogy": "像把本轮算出的上下文笔记写进活页本，后面直接翻页看。",
+        "professional": "decoder attention 会把当前 ubatch 的 K/V 通过 memory context 写入 KV cache。后续 token 的 attention 读取整段历史 K/V，而不是重算历史 token。",
+        "source": "src/llama-graph.cpp:1599",
+        "related": ["KV cache", "ubatch", "self-attention"]
+      }
+    });
     const DESCRIPTIONS = {"trace.open":"trace 文件打开，后续事件开始写入 JSONL。","main.args_parsed":"main() 完成参数解析。","http.chat.request":"HTTP handler 收到 /v1/chat/completions 请求体。","http.chat.parsed":"messages 通过 chat template 变成 prompt。","http.completions_impl.begin":"进入 completion/chat/infill 共用入口。","http.prompt.tokenized":"prompt 被 tokenizer 转成 token。","http.task.created":"创建 server_task。","results.wait_add":"HTTP 线程登记等待 task id 的结果。","queue.post":"task 被放入 queue_tasks。NEXT_RESPONSE 是内部续跑 tick。","http.tasks.posted":"HTTP handler 投递 task 完成。","loop.process_task":"主循环从 queue_tasks 取出 task。","task.process.begin":"server_context 开始处理 task。","task.slot_lookup":"为 task 选择可用 slot。","slot.launch.begin":"slot 准备承接 task。","slot.launch.end":"slot 已进入 STARTED 状态。","loop.update_slots.begin":"主循环准备调用 update_slots()。","slots.update.begin":"update_slots() 扫描活跃 slots。","slots.update.idle":"所有 slots 空闲，本轮无需推理。","decode.begin":"即将调用 llama_decode(ctx, batch)。","decode.end":"llama_decode 返回，ret=0 代表成功。","slot.prompt_done":"prompt 已处理完，slot 进入生成阶段。","sample.token":"sampler 从 logits 里选出下一个 token id。","token.processed":"token 转成文本并追加到 generated_text，同时检查停止条件。","response.final":"最终 completion result 已构造好。","results.send":"后台把结果放进 queue_results。","results.recv":"HTTP 线程取到结果，准备返回 JSON。"};
     const NODE_BY_ID = Object.fromEntries(NODES.map(n => [n.id, n]));
     let selectedNodeId = 'main';
