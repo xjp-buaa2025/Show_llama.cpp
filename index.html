@@ -693,8 +693,8 @@
       {
         kicker: '08 / 放大第一层：decode 总控',
         title: '先看外壳：ctx->decode() 把 batch 拆成 ubatch。',
-        lead: '这一页还没进入 Transformer 计算。它解释 llama_decode 进来后先做运行时准备：检查 batch、找 KV 位置、拆 ubatch、准备收集 logits。',
-        takeaway: '第 8 页是“准备要算什么”；第 9 页才是“真正开始跑图”。',
+        lead: '这一页还没进入 Transformer 计算。它解释 llama_decode 进来后先做运行时准备：检查 batch、管理 KV cache 位置、拆 ubatch、准备收集 logits。',
+        takeaway: 'KV cache 的“管理/分配位置”在第 8 页；真正 K/V 写入和读取发生在第 10 页 attention。',
         terms: ['llama_context::decode()', 'ubatch', 'KV cache', 'logits']
       },
       {
@@ -707,8 +707,8 @@
       {
         kicker: '10 / 放大第三层：Llama block 到 logits',
         title: '把 attention 和 FFN 放在一页看：hidden state 一路变成 logits。',
-        lead: '第 9 页说 graph 被 backend 跑起来；graph 里面反复执行每一层 Llama block：先用 attention 读上下文，再用 FFN 加工，最后 output norm + lm_head 投到词表。',
-        takeaway: '这一页把底层 graph 接回主链：Llama block -> logits -> sampler -> token。',
+        lead: '第 9 页说 graph 被 backend 跑起来；graph 里面反复执行每一层 Llama block：先写入/读取 KV cache 做 attention，再用 FFN 加工，最后 output norm + lm_head 投到词表。',
+        takeaway: '一句话：第 8 页管 KV cache 位置；第 10 页 attention 写 K/V、读历史 K/V。',
         terms: ['RMSNorm', 'RoPE', 'self-attention', 'FFN', 'logits', 'sampler']
       },
       {
@@ -856,7 +856,7 @@
     function renderDecodeZoomMap(activeIndex) {
       return '<div class="decode-zoom-map">'
         + [
-          ['8. decode 总控', 'batch -> ubatch'],
+          ['8. decode 总控', 'KV 位置 -> ubatch'],
           ['9. 跑 ggml graph', 'ubatch -> graph compute'],
           ['10. Llama block', 'attention -> FFN -> logits']
         ].map(([title, desc], stepIndex) => '<article class="zoom-step' + (stepIndex === activeIndex ? ' active' : '') + '"><strong>' + escapeHtml(title) + '</strong><small>' + escapeHtml(desc) + '</small></article>').join('')
@@ -1007,7 +1007,7 @@
         return '<div class="decode-zoom-visual">' + renderDecodeZoomMap(0) + '<div class="runtime-stack">'
           + [
             ['1. 检查 batch', '确认 token/embd、n_tokens、seq id 与 logits 标记合法。', 'validate'],
-            ['2. 准备 KV 位置', 'memory context 为本轮 token 找 cache slot，并处理 position。', 'KV cache'],
+            ['2. KV cache 管理', 'memory context 为本轮 token 选择 cache slot，并处理 seq/position。', 'KV slot'],
             ['3. 拆成 ubatch', '按 n_ubatch 与 backend 能力切成更小的可执行批次。', 'ubatch'],
             ['4. 收集输出', '每个 ubatch 跑完后，把 logits/embedding 拷回 context buffer。', 'output']
           ].map(([title, desc, code]) => '<article class="runtime-step"><strong>' + escapeHtml(title) + '</strong><small>' + escapeHtml(desc) + '</small><code>' + escapeHtml(code) + '</code></article>').join('')
@@ -1028,8 +1028,8 @@
         return '<div class="decode-zoom-visual">' + renderDecodeZoomMap(2) + '<div class="block-path">'
           + [
             ['1. embedding + RMSNorm', 'token id 先变 hidden vector，再稳定数值尺度。', 'tok_embd / norm', ''],
-            ['2. attention 准备', 'Q/K/V 投影、RoPE、KV write，准备读上下文。', 'QKV + RoPE', ''],
-            ['3. self-attention', 'Q 和历史 K/V 计算权重，得到上下文向量。', 'KQ * V', 'highlight'],
+            ['2. attention 准备 + 写 KV', 'Q/K/V 投影、RoPE，然后把本轮 K/V 写入 cache。', 'KV write', 'highlight'],
+            ['3. self-attention 读 KV', 'Q 读取历史 K/V 计算权重，得到上下文向量。', 'read K/V', ''],
             ['4. FFN 加工', 'attention 结果经残差、RMSNorm、门控 FFN 再变换。', 'SwiGLU', ''],
             ['5. lm_head -> logits', '最后投到 vocab，logits 回给 sampler 选 token。', 'logits', 'final']
           ].map(([title, desc, code, extra]) => '<article class="path-card ' + extra + '"><strong>' + escapeHtml(title) + '</strong><small>' + escapeHtml(desc) + '</small><code>' + escapeHtml(code) + '</code></article>').join('')
