@@ -161,9 +161,19 @@
     .lane-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
     .lane-card { min-height: 112px; padding: 14px; display: grid; align-content: center; text-align: center; gap: 6px; }
     .lane-card.primary { background: var(--blue-soft); border-color: #cbddec; }
+    .template-visual { width: 100%; display: grid; gap: 12px; align-content: center; }
     .transform-grid, .schedule-grid, .result-grid { width: 100%; display: grid; gap: 14px; align-items: stretch; }
     .transform-grid { grid-template-columns: minmax(0, 1fr) 110px minmax(0, 1fr); }
     .transform-arrow, .result-arrow { display: grid; place-items: center; color: var(--teal); font-size: 34px; font-weight: 700; }
+    .template-arrow { border: 1px solid var(--line); border-radius: 8px; background: var(--teal-soft); color: #194b47; padding: 12px; display: grid; place-items: center; gap: 6px; text-align: center; font-weight: 700; }
+    .template-arrow b { font-size: 24px; line-height: 1; }
+    .template-arrow small { color: #2d6761; font-size: 12px; line-height: 1.35; }
+    .template-note-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+    .template-note { border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 12px; display: grid; gap: 6px; align-content: start; min-height: 116px; }
+    .template-note strong { color: var(--teal); font-size: 15px; }
+    .template-note small { color: var(--muted); line-height: 1.5; }
+    .template-note.final { background: var(--gold-soft); border-color: #ead9a1; }
+    .template-note.final strong { color: #5b4600; }
     .mini-code { padding: 16px; background: #101719; color: #e7f0ed; overflow: hidden; }
     .mini-code b { display: block; color: #ffffff; margin-bottom: 10px; font-size: 15px; }
     .mini-code pre { margin: 0; padding: 0; background: transparent; max-height: none; font-size: 15px; }
@@ -313,7 +323,7 @@
     body.presentation .flow-arrow-text { color: #425153; background: #fff; font-weight: 600; }
     body.presentation .flow-arrow { min-height: 42px; }
     @media (max-width: 1280px) { .app { grid-template-columns: 280px minmax(0, 1fr) 330px; } }
-    @media (max-width: 1120px) { .app { display: block; } .left-nav, .glossary-side { position: static; height: auto; margin-bottom: 18px; } .top-grid, .talk-grid, .layout, .io-grid, body.presentation .presentation-stage, .transform-grid, .task-formation, .schedule-grid, .result-grid, .pipeline-grid, .decode-chain, .decode-io-grid, .runtime-stack, .graph-lifecycle, .attention-path, .logits-path, .hero-chain, .recap-chain, .deck-metrics, .lane-row, .token-growth, .round-grid, .update-overview, .update-round-layout, .update-detail-grid { grid-template-columns: 1fr; } .panel, .focus-panel { position: static; } h1 { font-size: 28px; } .flow-node { grid-template-columns: 38px minmax(0, 1fr); } .flow-kind { display: none; } .deck-shell { min-height: auto; } .deck-stage, .deck-slide { min-height: auto; } .slide-top, .deck-toolbar, .deck-status, .deck-controls { display: grid; justify-content: stretch; } .slide-takeaway { max-width: none; } .chain-card:not(:last-child)::after, .recap-card:not(:last-child)::after, .schedule-step:not(:last-child)::after, .pipeline-card:not(:last-child)::after, .decode-chain-card:not(:last-child)::after, .runtime-step:not(:last-child)::after, .graph-step:not(:last-child)::after, .path-card:not(:last-child)::after, .update-step:not(:last-child)::after { display: none; } .decode-io-arrow { display: none; } .batch-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 1120px) { .app { display: block; } .left-nav, .glossary-side { position: static; height: auto; margin-bottom: 18px; } .top-grid, .talk-grid, .layout, .io-grid, body.presentation .presentation-stage, .transform-grid, .template-note-grid, .task-formation, .schedule-grid, .result-grid, .pipeline-grid, .decode-chain, .decode-io-grid, .runtime-stack, .graph-lifecycle, .attention-path, .logits-path, .hero-chain, .recap-chain, .deck-metrics, .lane-row, .token-growth, .round-grid, .update-overview, .update-round-layout, .update-detail-grid { grid-template-columns: 1fr; } .panel, .focus-panel { position: static; } h1 { font-size: 28px; } .flow-node { grid-template-columns: 38px minmax(0, 1fr); } .flow-kind { display: none; } .deck-shell { min-height: auto; } .deck-stage, .deck-slide { min-height: auto; } .slide-top, .deck-toolbar, .deck-status, .deck-controls { display: grid; justify-content: stretch; } .slide-takeaway { max-width: none; } .chain-card:not(:last-child)::after, .recap-card:not(:last-child)::after, .schedule-step:not(:last-child)::after, .pipeline-card:not(:last-child)::after, .decode-chain-card:not(:last-child)::after, .runtime-step:not(:last-child)::after, .graph-step:not(:last-child)::after, .path-card:not(:last-child)::after, .update-step:not(:last-child)::after { display: none; } .decode-io-arrow { display: none; } .batch-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   </style>
 </head>
 <body>
@@ -640,8 +650,8 @@
       {
         kicker: '03 / 第一次关键变形',
         title: 'HTTP chat JSON 不会直接喂给模型。',
-        lead: 'OpenAI 风格的 messages 先过 chat template，变成模型真正看到的 prompt 文本。',
-        takeaway: 'JSON 是接口协议；prompt 才是模型输入。',
+        lead: '左边是给程序看的结构化请求；模型真正吃的是右边这一整段纯文本 prompt。',
+        takeaway: '核心：chat template 告诉模型“接下来轮到 assistant 继续写”。',
         terms: ['/v1/chat/completions', 'OAI compatibility', 'chat template', 'prompt']
       },
       {
@@ -924,11 +934,16 @@
           max_tokens: REQUEST_JSON.max_tokens,
           temperature: REQUEST_JSON.temperature
         });
-        return '<div class="transform-grid">'
+        return '<div class="template-visual"><div class="transform-grid">'
           + '<article class="mini-code"><b>HTTP 请求片段</b><pre>' + escapeHtml(reqPreview) + '</pre></article>'
-          + '<div class="transform-arrow">→</div>'
+          + '<div class="template-arrow"><b>→</b><small>chat template<br>拼接</small></div>'
           + '<article class="mini-code"><b>chat template 后的 prompt</b><pre>' + escapeHtml(PROMPT_TEXT) + '</pre></article>'
-          + '</div>';
+          + '</div><div class="template-note-grid">'
+          + '<article class="template-note"><strong>左边：接口格式</strong><small>JSON、messages、role 是给人和程序看的结构化请求。</small></article>'
+          + '<article class="template-note"><strong>中间：模板拼接</strong><small>chat template 把 messages 拼成一整段模型能读的 prompt。</small></article>'
+          + '<article class="template-note"><strong>右边：对话协议</strong><small><code>&lt;|im_start|&gt;user</code> 表示用户发言，<code>&lt;|im_end|&gt;</code> 表示说完。</small></article>'
+          + '<article class="template-note final"><strong>关键：assistant 留空</strong><small><code>&lt;|im_start|&gt;assistant</code> 后面为空，就是让模型继续写回答。</small></article>'
+          + '</div></div>';
       }
       if (index === 3) {
         return '<div class="task-formation">'
