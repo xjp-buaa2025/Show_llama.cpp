@@ -131,11 +131,25 @@
     .slide-term { border: 1px solid var(--line); border-radius: 999px; background: #fff; padding: 5px 10px; cursor: pointer; color: var(--teal); }
     .slide-term:hover { border-color: var(--teal); background: var(--teal-soft); }
     .hero-chain, .recap-chain { width: 100%; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; align-items: stretch; }
+    .hero-chain { position: relative; overflow: visible; }
     .chain-card, .recap-card, .lane-card, .task-card, .pipeline-card, .result-card, .token-step, .mini-code { border: 1px solid var(--line); border-radius: 8px; background: #fff; }
     .chain-card, .recap-card { min-height: 190px; padding: 16px 12px; display: grid; align-content: center; gap: 8px; text-align: center; position: relative; }
+    .chain-card { cursor: default; outline: none; transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease; }
+    .chain-card:hover, .chain-card:focus-visible { border-color: var(--teal); box-shadow: 0 14px 32px rgba(20, 74, 78, 0.14); transform: translateY(-2px); z-index: 4; }
     .chain-card strong, .recap-card strong { font-size: 17px; }
     .chain-card small, .recap-card small { color: var(--muted); }
     .chain-card:not(:last-child)::after, .recap-card:not(:last-child)::after { content: '→'; position: absolute; right: -10px; top: 50%; transform: translateY(-50%); width: 20px; color: var(--teal); font-size: 22px; font-weight: 700; z-index: 1; }
+    .chain-io { position: absolute; left: 50%; top: calc(100% + 12px); transform: translate(-50%, 8px); width: 300px; max-width: min(300px, calc(100vw - 64px)); border: 1px solid var(--line-strong); border-radius: 8px; background: #fbfcfb; padding: 12px; display: grid; gap: 8px; text-align: left; opacity: 0; pointer-events: none; transition: opacity 160ms ease, transform 160ms ease; z-index: 6; }
+    .chain-card:hover .chain-io, .chain-card:focus-visible .chain-io { opacity: 1; transform: translate(-50%, 0); }
+    .chain-card:nth-child(1) .chain-io, .chain-card:nth-child(2) .chain-io { left: 0; transform: translate(0, 8px); }
+    .chain-card:nth-child(1):hover .chain-io, .chain-card:nth-child(1):focus-visible .chain-io, .chain-card:nth-child(2):hover .chain-io, .chain-card:nth-child(2):focus-visible .chain-io { transform: translate(0, 0); }
+    .chain-card:nth-last-child(1) .chain-io, .chain-card:nth-last-child(2) .chain-io { left: auto; right: 0; transform: translate(0, 8px); }
+    .chain-card:nth-last-child(1):hover .chain-io, .chain-card:nth-last-child(1):focus-visible .chain-io, .chain-card:nth-last-child(2):hover .chain-io, .chain-card:nth-last-child(2):focus-visible .chain-io { transform: translate(0, 0); }
+    .chain-io-row { border-left: 3px solid var(--teal); padding-left: 9px; }
+    .chain-io-row.output { border-left-color: var(--blue); }
+    .chain-io-label { display: block; color: var(--teal); font-size: 12px; font-weight: 700; margin-bottom: 3px; }
+    .chain-io-row.output .chain-io-label { color: var(--blue); }
+    .chain-io-text { color: var(--ink); font-size: 13px; line-height: 1.5; word-break: break-word; }
     .deck-metrics { width: 100%; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-content: center; }
     .deck-metric { border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 16px; }
     .deck-metric span { display: block; color: var(--muted); font-size: 13px; }
@@ -829,9 +843,58 @@
 
     function renderDeckVisual(index) {
       if (index === 0) {
+        const heroSteps = [
+          {
+            label: 'HTTP JSON',
+            desc: '入口协议',
+            input: '客户端 POST 到 /v1/chat/completions，body 里有 messages、max_tokens、temperature。',
+            output: 'handle_chat_completions() 拿到原始请求体，进入 OpenAI 兼容解析。'
+          },
+          {
+            label: 'chat template',
+            desc: '模板展开',
+            input: 'messages 数组和模型自己的 chat template。',
+            output: '模型实际要读的 prompt 字符串，带 <|im_start|>user / assistant 标记。'
+          },
+          {
+            label: 'prompt tokens',
+            desc: '57 个 prompt token',
+            input: '上一步得到的 prompt 字符串。',
+            output: 'tokenizer 切出的 57 个 token id，后面会作为 prefill 输入。'
+          },
+          {
+            label: 'server_task',
+            desc: 'task 0',
+            input: 'prompt token 数、n_predict=8、stream=false、oaicompat=true。',
+            output: 'server_task{id=0,type=COMPLETION} 被登记等待并投进 queue_tasks。'
+          },
+          {
+            label: 'slot',
+            desc: 'slot 3',
+            input: '后台主循环取到 task 0，并寻找可用 slot。',
+            output: 'slot 3 承接 task，状态从 IDLE 变成 STARTED，等待 update_slots() 推进。'
+          },
+          {
+            label: 'llama_decode',
+            desc: 'decode + sampling',
+            input: 'update_slots() 构造的 llama_batch：prefill 是 57 tokens，续写时每轮 1 token。',
+            output: 'llama_decode() 更新 KV cache 并产出 logits；sampler 选出下一个 token id。'
+          },
+          {
+            label: 'HTTP JSON',
+            desc: '最终返回',
+            input: 'slot.generated_text、stop=LIMIT、usage/timings。',
+            output: 'OpenAI 兼容 JSON：choices[0].message.content = "\\\"Here!\\\" A"。'
+          }
+        ];
         return '<div style="width:100%; display:grid; gap:14px; align-content:center;">'
           + '<div class="hero-chain">'
-          + ['HTTP JSON', 'chat template', 'prompt tokens', 'server_task', 'slot', 'llama_decode', 'HTTP JSON'].map((label, i) => '<article class="chain-card"><strong>' + escapeHtml(label) + '</strong><small>' + escapeHtml(['入口协议', '模板展开', '57 个 prompt token', 'task 0', 'slot 3', 'decode + sampling', '最终返回'][i]) + '</small></article>').join('')
+          + heroSteps.map(step => '<article class="chain-card" tabindex="0" aria-label="' + escapeHtml(step.label + ' 输入输出') + '">'
+            + '<strong>' + escapeHtml(step.label) + '</strong><small>' + escapeHtml(step.desc) + '</small>'
+            + '<div class="chain-io">'
+            + '<div class="chain-io-row"><span class="chain-io-label">输入</span><div class="chain-io-text">' + escapeHtml(step.input) + '</div></div>'
+            + '<div class="chain-io-row output"><span class="chain-io-label">输出</span><div class="chain-io-text">' + escapeHtml(step.output) + '</div></div>'
+            + '</div></article>').join('')
           + '</div>'
           + '<div class="deck-metrics">'
           + '<article class="deck-metric"><span>请求入口</span><b>/v1/chat/completions</b></article>'
