@@ -204,16 +204,16 @@
     .decode-io-card h3 { font-size: 20px; }
     .decode-io-card code { width: fit-content; background: #f5f8f7; border-radius: 6px; padding: 3px 6px; }
     .decode-zoom-visual { width: 100%; display: grid; gap: 14px; align-content: center; }
-    .decode-zoom-map { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+    .decode-zoom-map { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
     .zoom-step { border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 10px 12px; display: grid; gap: 4px; position: relative; }
     .zoom-step:not(:last-child)::after { content: '→'; position: absolute; right: -10px; top: 50%; transform: translateY(-50%); color: var(--teal); font-size: 20px; font-weight: 700; z-index: 1; }
     .zoom-step strong { color: var(--ink); font-size: 14px; }
     .zoom-step small { color: var(--muted); line-height: 1.35; }
     .zoom-step.active { border-color: var(--teal); background: var(--teal-soft); }
     .zoom-step.active strong { color: var(--teal); }
-    .runtime-stack, .graph-lifecycle, .attention-path, .logits-path { width: 100%; display: grid; gap: 10px; align-content: center; }
+    .runtime-stack, .graph-lifecycle, .attention-path, .logits-path, .block-path { width: 100%; display: grid; gap: 10px; align-content: center; }
     .runtime-stack { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-    .graph-lifecycle, .attention-path, .logits-path { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    .graph-lifecycle, .attention-path, .logits-path, .block-path { grid-template-columns: repeat(5, minmax(0, 1fr)); }
     .runtime-step, .graph-step, .path-card { border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 14px; display: grid; gap: 8px; align-content: start; position: relative; }
     .runtime-step { min-height: 200px; }
     .graph-step, .path-card { min-height: 170px; }
@@ -331,7 +331,7 @@
     body.presentation .flow-arrow-text { color: #425153; background: #fff; font-weight: 600; }
     body.presentation .flow-arrow { min-height: 42px; }
     @media (max-width: 1280px) { .app { grid-template-columns: 280px minmax(0, 1fr) 330px; } }
-    @media (max-width: 1120px) { .app { display: block; } .left-nav, .glossary-side { position: static; height: auto; margin-bottom: 18px; } .top-grid, .talk-grid, .layout, .io-grid, body.presentation .presentation-stage, .transform-grid, .template-note-grid, .task-formation, .schedule-grid, .result-grid, .pipeline-grid, .decode-chain, .decode-io-grid, .decode-zoom-map, .runtime-stack, .graph-lifecycle, .attention-path, .logits-path, .hero-chain, .recap-chain, .deck-metrics, .lane-row, .token-growth, .round-grid, .update-overview, .update-round-layout, .update-detail-grid { grid-template-columns: 1fr; } .panel, .focus-panel { position: static; } h1 { font-size: 28px; } .flow-node { grid-template-columns: 38px minmax(0, 1fr); } .flow-kind { display: none; } .deck-shell { min-height: auto; } .deck-stage, .deck-slide { min-height: auto; } .slide-top, .deck-toolbar, .deck-status, .deck-controls { display: grid; justify-content: stretch; } .slide-takeaway { max-width: none; } .chain-card:not(:last-child)::after, .recap-card:not(:last-child)::after, .schedule-step:not(:last-child)::after, .pipeline-card:not(:last-child)::after, .decode-chain-card:not(:last-child)::after, .zoom-step:not(:last-child)::after, .runtime-step:not(:last-child)::after, .graph-step:not(:last-child)::after, .path-card:not(:last-child)::after, .update-step:not(:last-child)::after { display: none; } .decode-io-arrow { display: none; } .batch-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 1120px) { .app { display: block; } .left-nav, .glossary-side { position: static; height: auto; margin-bottom: 18px; } .top-grid, .talk-grid, .layout, .io-grid, body.presentation .presentation-stage, .transform-grid, .template-note-grid, .task-formation, .schedule-grid, .result-grid, .pipeline-grid, .decode-chain, .decode-io-grid, .decode-zoom-map, .runtime-stack, .graph-lifecycle, .attention-path, .logits-path, .block-path, .hero-chain, .recap-chain, .deck-metrics, .lane-row, .token-growth, .round-grid, .update-overview, .update-round-layout, .update-detail-grid { grid-template-columns: 1fr; } .panel, .focus-panel { position: static; } h1 { font-size: 28px; } .flow-node { grid-template-columns: 38px minmax(0, 1fr); } .flow-kind { display: none; } .deck-shell { min-height: auto; } .deck-stage, .deck-slide { min-height: auto; } .slide-top, .deck-toolbar, .deck-status, .deck-controls { display: grid; justify-content: stretch; } .slide-takeaway { max-width: none; } .chain-card:not(:last-child)::after, .recap-card:not(:last-child)::after, .schedule-step:not(:last-child)::after, .pipeline-card:not(:last-child)::after, .decode-chain-card:not(:last-child)::after, .zoom-step:not(:last-child)::after, .runtime-step:not(:last-child)::after, .graph-step:not(:last-child)::after, .path-card:not(:last-child)::after, .update-step:not(:last-child)::after { display: none; } .decode-io-arrow { display: none; } .batch-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   </style>
 </head>
 <body>
@@ -376,7 +376,7 @@
           </div>
         </div>
         <div class="deck-status">
-          <span id="deckCounter" class="deck-counter">01 / 15</span>
+          <span id="deckCounter" class="deck-counter">01 / 14</span>
           <div class="deck-progress"><span id="deckProgress"></span></div>
         </div>
         <div id="deckStage" class="deck-stage"></div>
@@ -701,46 +701,39 @@
         kicker: '09 / 放大第二层：跑 ggml graph',
         title: 'process_ubatch() 接住 ubatch，把它送进一张可执行的 graph。',
         lead: '它接住第 8 页准备好的 ubatch，填入 token、position、attention mask、K/V 地址等输入，再让 backend scheduler 分配到 CPU/GPU backend 执行。',
-        takeaway: '第 9 页是“把任务送进 graph”；第 10/11 页是“graph 里面的 Llama block 怎么算”。',
+        takeaway: '第 9 页是“把任务送进 graph”；第 10 页看 graph 里面的 Llama block 怎么算。',
         terms: ['process_ubatch()', 'ggml graph', 'backend scheduler', 'ggml op', 'matmul / mul_mat']
       },
       {
-        kicker: '10 / 放大第三层：graph 里的 attention',
-        title: '进入 graph 内部：先看一层 Llama block 的 attention 半边。',
-        lead: '第 9 页说 graph 被 backend 跑起来；从这一页开始看 graph 节点内容：embedding、RMSNorm、Q/K/V、RoPE、KV write、self-attention。',
-        takeaway: '第 10 页是 Llama block 前半：算上下文。下一页接 FFN 和 logits。',
-        terms: ['RMSNorm', 'RoPE', 'KV write', 'self-attention', 'matmul / mul_mat']
+        kicker: '10 / 放大第三层：Llama block 到 logits',
+        title: '把 attention 和 FFN 放在一页看：hidden state 一路变成 logits。',
+        lead: '第 9 页说 graph 被 backend 跑起来；graph 里面反复执行每一层 Llama block：先用 attention 读上下文，再用 FFN 加工，最后 output norm + lm_head 投到词表。',
+        takeaway: '这一页把底层 graph 接回主链：Llama block -> logits -> sampler -> token。',
+        terms: ['RMSNorm', 'RoPE', 'self-attention', 'FFN', 'logits', 'sampler']
       },
       {
-        kicker: '11 / 放大第四层：FFN 接回 logits',
-        title: '同一层后半：attention 结果继续过 FFN，最后接到 logits。',
-        lead: '这页接第 10 页的 attention 输出：残差、FFN、output norm、lm_head。所有层跑完后，logits 回到 server.cpp，sampler 才能选下一个 token。',
-        takeaway: '第 11 页把底层 graph 接回主链：logits -> sampler -> token。',
-        terms: ['FFN', 'RMSNorm', 'logits', 'sampler', 'sampling']
-      },
-      {
-        kicker: '12 / update_slots 的 8 轮节拍',
+        kicker: '11 / update_slots 的 8 轮节拍',
         title: '一次真实请求里，update_slots() 实际推进了 8 轮。',
         lead: '第 1 轮吃完整个 prompt；第 2 到第 8 轮，每轮只推进一个新 token，并让 generated_text 再长一点。',
         takeaway: 'update_slots() 不是一次做完，而是一轮轮把 slot 往前推。',
         terms: ['update_slots()', 'slot', 'batch', 'process_token()', 'stop=LIMIT']
       },
       {
-        kicker: '13 / 输出如何长出来',
+        kicker: '12 / 输出如何长出来',
         title: '回答不是一下子出现的，而是 token 一步一步累积。',
         lead: '这页只看真实生成过程。你会看到 generated_text 如何从空串逐步变成最终输出。',
         takeaway: '模型先选 token_id，再 detokenize 成文本片段。',
         terms: ['sampling', 'process_token()', 'detokenize', 'stop=LIMIT']
       },
       {
-        kicker: '14 / 回到 HTTP',
+        kicker: '13 / 回到 HTTP',
         title: 'slot 里的结果，还要再回到等待中的请求线程。',
         lead: '推理主循环不直接回客户端。它先产出 server_task_result，再交给 queue_results，被 handler 取走。',
         takeaway: '后台推理线程和 HTTP 线程，通过结果队列完成最后握手。',
         terms: ['send_final_response()', 'queue_results', 'HTTP handler', 'OAI compatibility']
       },
       {
-        kicker: '15 / 最后复盘',
+        kicker: '14 / 最后复盘',
         title: '把整条链路压缩成 7 个动作。',
         lead: '讲到这里，再回看全图，server.cpp 的主流程就不再是一团代码，而是一条清晰的数据流水线。',
         takeaway: '看懂 server.cpp，先抓住这 7 步。',
@@ -865,8 +858,7 @@
         + [
           ['8. decode 总控', 'batch -> ubatch'],
           ['9. 跑 ggml graph', 'ubatch -> graph compute'],
-          ['10. graph 内 attention', 'hidden -> context'],
-          ['11. FFN / logits', 'context -> logits']
+          ['10. Llama block', 'attention -> FFN -> logits']
         ].map(([title, desc], stepIndex) => '<article class="zoom-step' + (stepIndex === activeIndex ? ' active' : '') + '"><strong>' + escapeHtml(title) + '</strong><small>' + escapeHtml(desc) + '</small></article>').join('')
         + '</div>';
     }
@@ -1033,28 +1025,17 @@
           + '</div></div>';
       }
       if (index === 9) {
-        return '<div class="decode-zoom-visual">' + renderDecodeZoomMap(2) + '<div class="attention-path">'
+        return '<div class="decode-zoom-visual">' + renderDecodeZoomMap(2) + '<div class="block-path">'
           + [
-            ['1. token embedding', 'token id 查 tok_embd，得到 hidden vector。', 'tok_embd', ''],
-            ['2. RMSNorm', '先把 hidden state 的尺度稳定住。', 'attn_norm', ''],
-            ['3. Q/K/V 投影', '三组权重矩阵分别生成 query、key、value。', 'mul_mat', ''],
-            ['4. RoPE + KV write', '位置旋进 Q/K；K/V 写入 cache。', 'rope / cache', 'highlight'],
-            ['5. self-attention', 'Q 和历史 K/V 计算权重，再读出上下文。', 'KQ * V', 'final']
+            ['1. embedding + RMSNorm', 'token id 先变 hidden vector，再稳定数值尺度。', 'tok_embd / norm', ''],
+            ['2. attention 准备', 'Q/K/V 投影、RoPE、KV write，准备读上下文。', 'QKV + RoPE', ''],
+            ['3. self-attention', 'Q 和历史 K/V 计算权重，得到上下文向量。', 'KQ * V', 'highlight'],
+            ['4. FFN 加工', 'attention 结果经残差、RMSNorm、门控 FFN 再变换。', 'SwiGLU', ''],
+            ['5. lm_head -> logits', '最后投到 vocab，logits 回给 sampler 选 token。', 'logits', 'final']
           ].map(([title, desc, code, extra]) => '<article class="path-card ' + extra + '"><strong>' + escapeHtml(title) + '</strong><small>' + escapeHtml(desc) + '</small><code>' + escapeHtml(code) + '</code></article>').join('')
           + '</div></div>';
       }
       if (index === 10) {
-        return '<div class="decode-zoom-visual">' + renderDecodeZoomMap(3) + '<div class="logits-path">'
-          + [
-            ['1. attention 输出', '上下文向量回到主干，并做 residual add。', 'residual', ''],
-            ['2. FFN 前 RMSNorm', '进入前馈网络前再稳定一次 hidden state。', 'ffn_norm', ''],
-            ['3. FFN', 'gate/up/down projection 加激活函数，继续变换每个 token。', 'SwiGLU', ''],
-            ['4. output norm + lm_head', '所有层跑完后，把 hidden state 投到 vocab 维度。', 'lm_head', 'highlight'],
-            ['5. logits 给 sampler', '每个词表 token 得到一个分数，server.cpp 在这里接回采样。', 'logits', 'final']
-          ].map(([title, desc, code, extra]) => '<article class="path-card ' + extra + '"><strong>' + escapeHtml(title) + '</strong><small>' + escapeHtml(desc) + '</small><code>' + escapeHtml(code) + '</code></article>').join('')
-          + '</div></div>';
-      }
-      if (index === 11) {
         return '<div class="round-grid">'
           + UPDATE_ROUNDS.map(round => '<article class="round-card' + (round.round === UPDATE_ROUNDS.length ? ' final' : '') + '">'
             + '<span>Round ' + round.round + '</span>'
@@ -1065,12 +1046,12 @@
           + '</article>').join('')
           + '</div>';
       }
-      if (index === 12) {
+      if (index === 11) {
         return '<div class="token-growth">'
           + TOKEN_ROWS.map((row, idx) => '<article class="token-step' + (idx === TOKEN_ROWS.length - 1 ? ' final' : '') + '"><code>' + escapeHtml(String(row.token_id)) + '</code><strong>' + escapeHtml(row.generated_text || ' ') + '</strong><small>' + escapeHtml('本轮新增: ' + JSON.stringify(row.text_to_send) + ' / ' + row.stop) + '</small></article>').join('')
           + '</div>';
       }
-      if (index === 13) {
+      if (index === 12) {
         const responsePreview = pretty({
           content: RESPONSE_JSON.choices?.[0]?.message?.content,
           prompt_tokens: RESPONSE_JSON.usage?.prompt_tokens,
