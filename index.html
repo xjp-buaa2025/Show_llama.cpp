@@ -150,10 +150,11 @@
     .chain-io-label { display: block; color: var(--teal); font-size: 12px; font-weight: 700; margin-bottom: 3px; }
     .chain-io-row.output .chain-io-label { color: var(--blue); }
     .chain-io-text { color: var(--ink); font-size: 13px; line-height: 1.5; word-break: break-word; }
-    .deck-metrics { width: 100%; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-content: center; }
-    .deck-metric { border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 16px; }
+    .deck-metrics { width: 100%; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; align-content: center; }
+    .deck-metric { min-width: 0; border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 14px; }
     .deck-metric span { display: block; color: var(--muted); font-size: 13px; }
-    .deck-metric b { display: block; margin-top: 8px; font-size: 22px; }
+    .deck-metric b { display: block; margin-top: 8px; color: var(--ink); font-size: 20px; line-height: 1.25; overflow-wrap: anywhere; }
+    .deck-metric b.text-value { font-size: 16px; line-height: 1.35; }
     .dual-lanes { width: 100%; display: grid; gap: 14px; align-content: center; }
     .lane-band { border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 16px; }
     .lane-band strong { display: block; margin-bottom: 12px; font-size: 18px; }
@@ -887,6 +888,7 @@
             output: 'OpenAI 兼容 JSON：choices[0].message.content = "\\\"Here!\\\" A"。'
           }
         ];
+        const userInput = REQUEST_JSON.messages?.find(message => message.role === 'user')?.content ?? '';
         return '<div style="width:100%; display:grid; gap:14px; align-content:center;">'
           + '<div class="hero-chain">'
           + heroSteps.map(step => '<article class="chain-card" tabindex="0" aria-label="' + escapeHtml(step.label + ' 输入输出') + '">'
@@ -898,6 +900,8 @@
           + '</div>'
           + '<div class="deck-metrics">'
           + '<article class="deck-metric"><span>请求入口</span><b>/v1/chat/completions</b></article>'
+          + '<article class="deck-metric"><span>使用模型</span><b>' + escapeHtml(REQUEST_JSON.model) + '</b></article>'
+          + '<article class="deck-metric"><span>输入内容</span><b class="text-value">' + escapeHtml(userInput) + '</b></article>'
           + '<article class="deck-metric"><span>prompt token</span><b>57</b></article>'
           + '<article class="deck-metric"><span>completion token</span><b>8</b></article>'
           + '<article class="deck-metric"><span>最终内容</span><b>&quot;Here!&quot; A</b></article>'
